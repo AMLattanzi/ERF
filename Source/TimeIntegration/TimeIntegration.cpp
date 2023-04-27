@@ -165,19 +165,37 @@ void ERF::erf_advance(int level,
             }
 
 
+
             // ABL LawOfTheWall Hack (compute tau13 w/ one-sided diff)
             tbxxz.setBig(2,0); // Only loop bottom layer
-            //amrex::Print() << "STRAIN BOX: " << tbxxz << "\n";
             amrex::ParallelFor(tbxxz, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
             {
-                //amrex::Print() << "Tau13 pre: " << IntVect(i,j,k) << ' ' << tau13(i,j,k) << "\n";
-                amrex::Real GradUz = 0.5 * ( 4.0 * u(i,j,k+1) - u(i,j,k+2) - 3.0 * u(i,j,k) ) * dxInv[0];
-                tau13(i,j,k) = 0.5 * ( GradUz + (w(i, j, k) - w(i-1, j, k))*dxInv[0]);
-                //amrex::Real GradUz2 = (-(8./3.) * u(i,j,k-1) + 3. * u(i,j,k) - (1./3.) * u(i,j,k+1))*dxInv[2];
-                //amrex::Print() << "Tau13 pos: " << IntVect(i,j,k) << ' ' << tau13(i,j,k) << ' ' << GradUz << ' ' << GradUz2 << "\n";
-                //amrex::Print() << "\n";
+                /*
+                // Use stress to compute viscosity (located at bottom face)
+                Real Cs         = solverChoice.Cs;
+                Real tauw       = solverChoice.tauw_13;
+                Real cellVol    = 1.0 / (dxInv[0] * dxInv[1] * dxInv[2]);
+                Real Delta      = std::pow(cellVol,1.0/3.0);
+                Real CsDeltaSqr = Cs*Cs*Delta*Delta;
+                Real mu_t = std::sqrt(CsDeltaSqr * tauw);
+                tau13(i,j,k) = 0.5 * ( tauw / mu_t + (w(i, j, k) - w(i-1, j, k))*dxInv[0] );
+                */
+
+                // Use one-sided difference (aliased half dz off of face)
+                amrex::Real GradUz = 0.5 * ( 4.0 * u(i,j,k+1) - u(i,j,k+2) - 3.0 * u(i,j,k) ) * dxInv[2];
+                tau13(i,j,k) = 0.5 * ( GradUz + (w(i, j, k) - w(i-1, j, k))*dxInv[0] );
+
+                /*
+                if(i==1 && j==1 && k==0){
+                    amrex::Print() << "STRAIN MOD: " << IntVect(i,j,k) << ' '
+                                   << tau13(i,j,k) << ' '
+                                   << 0.5 * 0.5 * ( 4.0 * u(i,j,k+1) - u(i,j,k+2) - 3.0 * u(i,j,k) ) * dxInv[2] << ' '
+                                   << 0.5 * 0.5 * ( 4.0 * u(i,j,k+2) - u(i,j,k+3) - 3.0 * u(i,j,k+1) ) * dxInv[2] << ' '
+                                   << 0.5 * (-(8./3.) * u(i,j,k-1) + 3. * u(i,j,k) - (1./3.) * u(i,j,k+1))*dxInv[2] << ' '
+                                   << 0.5 * (tauw / mu_t) << "\n";
+                }
+                */
             });
-            //exit(0);
 
 
         } // mfi

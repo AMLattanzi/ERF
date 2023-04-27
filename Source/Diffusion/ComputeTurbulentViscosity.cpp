@@ -84,6 +84,21 @@ void ComputeTurbulentViscosityLES (const amrex::MultiFab& Tau11, const amrex::Mu
           mu_turb(i, j, k, EddyDiff::Mom_h) = CsDeltaSqrMsf * cell_data(i, j, k, Rho_comp) * std::sqrt(2.0*SmnSmn);
           mu_turb(i, j, k, EddyDiff::Mom_v) = mu_turb(i, j, k, EddyDiff::Mom_h);
         });
+
+        // DEBUG
+        amrex::Print() << "MU CHECK: " << mu_turb(1,1,0,EddyDiff::Mom_h) << ' ' << mu_turb(1,1,1,EddyDiff::Mom_h) << "\n";
+
+        // DEBUG Relation
+        Real tauw       = solverChoice.tauw_13;
+        Real cellVol    = 1.0 / (dxInv[0] * dxInv[1] * dxInv[2]);
+        Real Delta      = std::pow(cellVol,1.0/3.0);
+        Real CsDeltaSqr = Cs*Cs*Delta*Delta;
+        Real mu_t       = std::sqrt(CsDeltaSqr * tauw);
+        Real slope      = (mu_turb(1,1,1,EddyDiff::Mom_h) - mu_t) / (1.5 * (1./dxInv[2]));
+        Real mu_interp  = slope * (0.5 * (1./dxInv[2])) + mu_t;
+        amrex::Print() << "MU PREDICT: " << mu_t << ' ' << mu_interp << "\n";
+        amrex::Print() << "\n";
+
       }
     }
     // DEARDORFF: Fill Kturb for momentum in horizontal and vertical
