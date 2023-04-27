@@ -163,6 +163,23 @@ void ERF::erf_advance(int level,
                                 bc_ptr_h, dxInv,
                                 mf_m, mf_u, mf_v);
             }
+
+
+            // ABL LawOfTheWall Hack (compute tau13 w/ one-sided diff)
+            tbxxz.setBig(2,0); // Only loop bottom layer
+            //amrex::Print() << "STRAIN BOX: " << tbxxz << "\n";
+            amrex::ParallelFor(tbxxz, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+            {
+                //amrex::Print() << "Tau13 pre: " << IntVect(i,j,k) << ' ' << tau13(i,j,k) << "\n";
+                amrex::Real GradUz = 0.5 * ( 4.0 * u(i,j,k+1) - u(i,j,k+2) - 3.0 * u(i,j,k) ) * dxInv[0];
+                tau13(i,j,k) = 0.5 * ( GradUz + (w(i, j, k) - w(i-1, j, k))*dxInv[0]);
+                //amrex::Real GradUz2 = (-(8./3.) * u(i,j,k-1) + 3. * u(i,j,k) - (1./3.) * u(i,j,k+1))*dxInv[2];
+                //amrex::Print() << "Tau13 pos: " << IntVect(i,j,k) << ' ' << tau13(i,j,k) << ' ' << GradUz << ' ' << GradUz2 << "\n";
+                //amrex::Print() << "\n";
+            });
+            //exit(0);
+
+
         } // mfi
     } // l_use_diff
     } // profile

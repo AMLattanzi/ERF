@@ -450,10 +450,18 @@ void erf_slow_rhs_pre (int /*level*/, int nrk,
                     tau12(i,j,k) = s12(i,j,k);
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-                    tau13(i,j,k) = s13(i,j,k);
+                    if(k==0) {
+                        tau13(i,j,k) = solverChoice.tauw_13;
+                    } else {
+                        tau13(i,j,k) = s13(i,j,k);
+                    }
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-                    tau23(i,j,k) = s23(i,j,k);
+                    if(k==0) {
+                        tau23(i,j,k) = 0.;
+                    } else {
+                        tau23(i,j,k) = s23(i,j,k);
+                    }
                 });
                 } // end profile
             } // l_use_terrain

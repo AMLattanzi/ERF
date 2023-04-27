@@ -258,6 +258,27 @@ struct SolverChoice {
             NumDiffCoeff *= std::pow(2.0,-6);
         }
 
+        // ABL LawOfTheWall Hack (pressure grad already parsed)
+        //=====================================================
+        amrex::Vector<amrex::Real> ProbExtent = {0.0, 0.0, 0.0};
+        amrex::ParmParse pp2("geometry");
+        pp2.queryarr("prob_extent",ProbExtent);
+
+        amrex::ParmParse pp3("erf");
+        pp3.query("re_tau",re_tau);
+
+        tauw_13 = abl_pressure_grad[0] * ProbExtent[2];
+
+        // Verify inputs are consistent (assumes rho = 1)
+        amrex::Real mu;     pp.query("dynamicViscosity",mu);
+        amrex::Real u_tau    = mu * re_tau;
+        amrex::Real tau_wall = u_tau * u_tau;
+        amrex::Real tol      = 1e-6;
+        amrex::Print() << "Channel balance using tau13: " << tauw_13
+                       << " expected value is: " << tau_wall << "\n";
+        amrex::Print() << "\n";
+        AMREX_ASSERT_WITH_MESSAGE(std::abs(tauw_13 - tau_wall) < tol,
+                                  "Error in momentum balance: Px != tau_wall");
     }
 
     void display()
@@ -460,6 +481,10 @@ struct SolverChoice {
     ABLDriverType abl_driver_type;
     amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> abl_pressure_grad;
     amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> abl_geo_forcing;
+
+    // ABL LawOfTheWall hack
+    amrex::Real re_tau;
+    amrex::Real tauw_13;
 
     int ave_plane {2};
 #ifdef ERF_USE_MOISTURE

@@ -125,7 +125,7 @@ init_custom_prob(
     state(i, j, k, RhoTheta_comp) = RhoTheta;
 
     // Set scalar = A_0*exp(-10r^2), where r is distance from center of domain
-    state(i, j, k, RhoScalar_comp) = parms.A_0 * exp(-10.*r*r);
+    state(i, j, k, RhoScalar_comp) = 0.; //parms.A_0 * exp(-10.*r*r);
 
     // Set an initial value for QKE
     state(i, j, k, RhoQKE_comp) = parms.QKE_0;
@@ -204,6 +204,40 @@ init_custom_prob(
         z_vel(i, j, k) = parms.W_0 + z_vel_prime;
     }
   });
+
+  // // ABL LawOfTheWall Hack (match AMR-Wind ICs)
+  //========================================================
+  ParmParse pp("erf");
+  Real mu;     pp.query("dynamicViscosity",mu);
+  Real re_tau; pp.query("re_tau",re_tau);
+  Real kappa = 0.41;
+  Real rho   = parms.rho_0;
+  Real u_tau = mu * re_tau / (rho * 1.0);
+  Real ytau  = mu / (u_tau * rho);
+  ParallelFor(xbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+  {
+      const Real* prob_lo = geomdata.ProbLo();
+      const Real* dx      = geomdata.CellSize();
+      Real h = prob_lo[2] + (k + 0.5) * dx[2];
+      if (h > 1.0) {
+          h = 2.0 - h;
+      }
+      Real hp = h / ytau;
+      x_vel(i, j, k) = u_tau * ( 1. / kappa * std::log1p(kappa * hp)
+                               + 7.8 * ( 1.0 - std::exp(-hp / 11.0)
+                                       - (hp / 11.0) * std::exp(-hp / 3.0)) );
+  });
+
+  ParallelFor(ybx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+  {
+      y_vel(i, j, k) = 0.0;
+  });
+
+  ParallelFor(zbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+  {
+      z_vel(i, j, k) = 0.0;
+  });
+
 }
 
 void
