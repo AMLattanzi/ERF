@@ -289,6 +289,10 @@ ERF::derive_stress_profiles(Gpu::HostVector<Real>& h_avg_tau11, Gpu::HostVector<
 {
     int lev = 0;
 
+    // ABL LawOfTheWall hack
+    SFS_hfx3_lev[lev]->setVal(0.);
+    SFS_diss_lev[lev]->setVal(0.);
+
     // This will hold the stress tensor components
     MultiFab mf_out(grids[lev], dmap[lev], 8, 0);
 
