@@ -267,7 +267,7 @@ struct SolverChoice {
         amrex::ParmParse pp3("erf");
         pp3.query("re_tau",re_tau);
 
-        tauw_13 = abl_pressure_grad[0] * ProbExtent[2];
+        tauw_13 = std::abs(abl_pressure_grad[0]) * ProbExtent[2];
 
         // Verify inputs are consistent (assumes rho = 1)
         amrex::Real mu;     pp.query("dynamicViscosity",mu);
