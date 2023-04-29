@@ -451,10 +451,15 @@ void erf_slow_rhs_pre (int /*level*/, int nrk,
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
                     if(k==0) {
-                        tau13(i,j,k) = solverChoice.tauw_13;
+                        tau13(i,j,k) = -solverChoice.tauw_13; // -mu *du/dz convention
                     } else {
                         tau13(i,j,k) = s13(i,j,k);
                     }
+
+                    /*
+                    if(i==1 && j==1 && k<5)
+                        amrex::Print() << IntVect(i,j,k) << ' ' << tau13(i,j,k) << "\n";
+                    */
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
                     if(k==0) {

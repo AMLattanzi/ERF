@@ -164,8 +164,6 @@ void ERF::erf_advance(int level,
                                 mf_m, mf_u, mf_v);
             }
 
-
-
             // ABL LawOfTheWall Hack (compute tau13 w/ one-sided diff)
             tbxxz.setBig(2,0); // Only loop bottom layer
             amrex::ParallelFor(tbxxz, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
@@ -193,8 +191,7 @@ void ERF::erf_advance(int level,
                                    << tau13(i,j,k) << ' '
                                    << 0.5 * 0.5 * ( 4.0 * u(i,j,k+1) - u(i,j,k+2) - 3.0 * u(i,j,k) ) * dxInv[2] << ' '
                                    << 0.5 * 0.5 * ( 4.0 * u(i,j,k+2) - u(i,j,k+3) - 3.0 * u(i,j,k+1) ) * dxInv[2] << ' '
-                                   << 0.5 * (-(8./3.) * u(i,j,k-1) + 3. * u(i,j,k) - (1./3.) * u(i,j,k+1))*dxInv[2] << ' '
-                                   << 0.5 * (tauw / mu_t) << "\n";
+                                   << 0.5 * (-(8./3.) * u(i,j,k-1) + 3. * u(i,j,k) - (1./3.) * u(i,j,k+1))*dxInv[2] <<  "\n";
                 }
                 */
             });
