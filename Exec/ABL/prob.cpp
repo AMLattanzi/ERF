@@ -228,6 +228,36 @@ init_custom_prob(
                                        - (hp / 11.0) * std::exp(-hp / 3.0)) );
   });
 
+  /*
+  // Analytical solution
+  const Real* prob_lo = geomdata.ProbLo();
+  const Real* dx      = geomdata.CellSize();
+  Real Delta          = std::pow(dx[0]*dx[1]*dx[2],1.0/3.0);
+
+  ParmParse pp("erf");
+  Real mu; pp.query("dynamicViscosity",mu);
+  Real Cs; pp.query("Cs",Cs);
+
+  amrex::Vector<amrex::Real> abl_pressure_grad_in = {0.0, 0.0, 0.0};
+  pp.queryarr("abl_pressure_grad",abl_pressure_grad_in);
+  Real Px = -abl_pressure_grad_in[0];
+
+  Real Factor = mu / (Cs * Delta * Delta);
+
+  ParallelFor(xbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+  {
+      Real z = prob_lo[2] + (k + 0.5) * dx[2];
+
+      Real Tmp1 = -Factor * z;
+      Real Tmp2 = (Cs * Delta * Delta) / (3.0 * Px);
+      Real Tmp3 = 2.0 / (Cs * Delta * Delta) * Px * z;
+      Real Tmp4 = std::pow(Factor,2.0);
+
+      x_vel(i, j, k) = Tmp1 + Tmp2 * std::pow(Tmp3 + Tmp4,1.5);
+
+  });
+  */
+
   ParallelFor(ybx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
   {
       y_vel(i, j, k) = 0.0;
