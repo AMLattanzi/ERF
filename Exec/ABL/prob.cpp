@@ -240,21 +240,23 @@ init_custom_prob(
 
   amrex::Vector<amrex::Real> abl_pressure_grad_in = {0.0, 0.0, 0.0};
   pp.queryarr("abl_pressure_grad",abl_pressure_grad_in);
-  Real Px = -abl_pressure_grad_in[0];
+  Real Px = abl_pressure_grad_in[0];
 
-  Real Factor = mu / (Cs * Delta * Delta);
+  Real Factor = mu / (Cs * Cs * Delta * Delta);
+
+  Real C0 = 38115.76743991355;
+  Real C1 = 811.5733178848386;
 
   ParallelFor(xbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
   {
       Real z = prob_lo[2] + (k + 0.5) * dx[2];
 
       Real Tmp1 = -Factor * z;
-      Real Tmp2 = (Cs * Delta * Delta) / (3.0 * Px);
-      Real Tmp3 = 2.0 / (Cs * Delta * Delta) * Px * z;
+      Real Tmp2 = (Cs * Cs * Delta * Delta) / (3.0 * Px);
+      Real Tmp3 = 2.0 / (Cs * Cs * Delta * Delta) * Px * z;
       Real Tmp4 = std::pow(Factor,2.0);
 
-      x_vel(i, j, k) = Tmp1 + Tmp2 * std::pow(Tmp3 + Tmp4,1.5);
-
+      x_vel(i, j, k) = Tmp1 + Tmp2 * std::pow(Tmp3 + Tmp4 + C1,1.5) + C0;
   });
   */
 
