@@ -157,13 +157,14 @@
                     Real Tmp4 = std::pow(Factor,2.0);
                     Real u_ref = Tmp1 + Tmp2 * std::pow(Tmp3 + Tmp4 + C1,1.5) + C0;
                     Real u_sol = ssum[IntVar::xmom](i,j,k);
-                    Real mag   = std::sqrt( (u_sol - u_ref) * (u_sol - u_ref) );
+                    Real mag   = dx[0] * dx[1] * dx[2] * (u_sol - u_ref) * (u_sol - u_ref);
 
                     sum +=  mag;
                 });
+                const auto total_vol = fine_geom.ProbDomain().volume();
                 amrex::Print() << "\n";
-                amrex::Print() << "L2: " << dx[1] * dx[2] * dx[2] * sum <<  ' ' << sum / Real(tbx.numPts())<<"\n";
-                amrex::Print(amrex::ErrorStream()) << dx[1] * dx[2] * dx[2] * sum << ',' <<"\n";
+                amrex::Print() << "L2: " << std::sqrt(sum/total_vol) <<"\n";
+                amrex::Print(amrex::ErrorStream()) << std::sqrt(sum/total_vol) << ',' <<"\n";
             }
         }
 

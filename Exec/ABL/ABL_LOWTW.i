@@ -18,13 +18,13 @@ fabarray.mfiter_tile_size = 1024 1024 1024
 #amr.n_cell           =  32      32     64
 #zhi.velocity = 0.5664029656909406 0 0
     
-#geometry.prob_extent =  0.5     0.5    1.0
-#amr.n_cell           =  16      16     32
-#zhi.velocity = 0.5646234542509774 0 0
-
 geometry.prob_extent =  0.5     0.5    1.0
-amr.n_cell           =  8      8     16
-zhi.velocity = 0.5576738677495996 0 0
+amr.n_cell           =  16      16     32
+zhi.velocity = 0.5646234542509774 0 0
+
+#geometry.prob_extent =  0.5     0.5    1.0
+#amr.n_cell           =  8      8     16
+#zhi.velocity = 0.5576738677495996 0 0
 
 #geometry.prob_extent =  0.5     0.5    1.0
 #amr.n_cell           =  4      4     8
@@ -42,7 +42,7 @@ zhi.type = "NoSlipWall"
 
 # TIME STEP CONTROL
 erf.no_substepping = 1
-erf.fixed_dt       = 0.1 #0.005  # fixed time step depending on grid resolution
+erf.fixed_dt       = 0.005  # fixed time step depending on grid resolution
 
 # DIAGNOSTICS & VERBOSITY
 erf.sum_interval   = 1       # timesteps between computing mass
