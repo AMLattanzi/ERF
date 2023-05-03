@@ -207,6 +207,7 @@ init_custom_prob(
 
   // // ABL LawOfTheWall Hack (match AMR-Wind ICs)
   //========================================================
+  /*
   ParmParse pp("erf");
   Real mu;     pp.query("dynamicViscosity",mu);
   Real re_tau; pp.query("re_tau",re_tau);
@@ -227,8 +228,9 @@ init_custom_prob(
                                + 7.8 * ( 1.0 - std::exp(-hp / 11.0)
                                        - (hp / 11.0) * std::exp(-hp / 3.0)) );
   });
+  */
 
-  /*
+
   // Analytical solution
   const Real* prob_lo = geomdata.ProbLo();
   const Real* dx      = geomdata.CellSize();
@@ -244,8 +246,17 @@ init_custom_prob(
 
   Real Factor = mu / (Cs * Cs * Delta * Delta);
 
-  Real C0 = 38115.76743991355;
-  Real C1 = 811.5733178848386;
+  Vector<Real> C0_arr = {605551.4603806001,  38115.76743991355, 2449.4399999999982, 169.90632344067848};
+  Vector<Real> C1_arr = {3250.1208744082833, 811.5733178848386, 201.95839999999998, 49.63299783004268};
+  Vector<Real> dz_arr = {1./64., 1./32., 1./16., 1./8.};
+
+  Real C0, C1;
+  for (int i(0); i<C0_arr.size(); ++i) {
+      if (std::abs(dx[2] - dz_arr[i]) < 1.0e-6){
+          C0 = C0_arr[i];
+          C1 = C1_arr[i];
+      }
+  }
 
   ParallelFor(xbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
   {
@@ -258,7 +269,7 @@ init_custom_prob(
 
       x_vel(i, j, k) = Tmp1 + Tmp2 * std::pow(Tmp3 + Tmp4 + C1,1.5) + C0;
   });
-  */
+
 
   ParallelFor(ybx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
   {

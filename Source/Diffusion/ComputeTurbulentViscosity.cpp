@@ -86,7 +86,7 @@ void ComputeTurbulentViscosityLES (const amrex::MultiFab& Tau11, const amrex::Mu
         });
 
         // DEBUG
-        amrex::Print() << "MU CHECK: " << mu_turb(1,1,0,EddyDiff::Mom_h) << ' ' << mu_turb(1,1,1,EddyDiff::Mom_h) << "\n";
+        //amrex::Print() << "MU CHECK: " << mu_turb(1,1,0,EddyDiff::Mom_h) << ' ' << mu_turb(1,1,1,EddyDiff::Mom_h) << "\n";
 
         /*
         // DEBUG Relation

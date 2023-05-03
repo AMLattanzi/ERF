@@ -9,20 +9,40 @@ fabarray.mfiter_tile_size = 1024 1024 1024
 #geometry.prob_extent =  12.0     6.0    1.0
 #amr.n_cell           =   384     192     32
 
-geometry.prob_extent =  12.0     1.0    1.0
-amr.n_cell           =   384      32     32
+#geometry.prob_extent =  12.0     1.0    1.0
+#amr.n_cell           =   384      32     32
+
+# CONVERGENCE
+#======================================
+#geometry.prob_extent =  0.5     0.5    1.0
+#amr.n_cell           =  32      32     64
+#zhi.velocity = 0.5664029656909406 0 0
+    
+#geometry.prob_extent =  0.5     0.5    1.0
+#amr.n_cell           =  16      16     32
+#zhi.velocity = 0.5646234542509774 0 0
+
+geometry.prob_extent =  0.5     0.5    1.0
+amr.n_cell           =  8      8     16
+zhi.velocity = 0.5576738677495996 0 0
+
+#geometry.prob_extent =  0.5     0.5    1.0
+#amr.n_cell           =  4      4     8
+#zhi.velocity = 0.5322727144609587 0 0
     
 geometry.is_periodic = 1 1 0
 
-zlo.type = "NoSlipWall"
-zhi.type = "SlipWall"
-
 # DEBUG ONLY
 #zlo.velocity = 1 1 0 (fcompare w/ & w/o this passed) 
+zlo.type = "NoSlipWall"
+    
+#zhi.type = "SlipWall"
+zhi.type = "NoSlipWall"
+ 
 
 # TIME STEP CONTROL
 erf.no_substepping = 1
-erf.fixed_dt       = 0.005  # fixed time step depending on grid resolution
+erf.fixed_dt       = 0.1 #0.005  # fixed time step depending on grid resolution
 
 # DIAGNOSTICS & VERBOSITY
 erf.sum_interval   = 1       # timesteps between computing mass
@@ -56,7 +76,7 @@ erf.use_gravity = false
 
 # Constant molecular viscosity and Smag model
 erf.molec_diff_type  = "Constant"
-erf.dynamicViscosity = 3.5e-4
+erf.dynamicViscosity = 3.5e-3 # 3.5e-4
 erf.les_type         = "Smagorinsky"
 erf.Cs               = 0.1
 
@@ -70,8 +90,8 @@ erf.re_tau = 180.0
 # (mu * re_tau)^2 = tau_wall = P_x * L_z
 
 # Output for postprocessing
-erf.data_log = scalar_hist.log havg_profiles_mean.log havg_profiles_covar.log havg_profiles_sgs.log
-erf.profile_int = 500 # output interval in number of timesteps
+#erf.data_log = scalar_hist.log havg_profiles_mean.log havg_profiles_covar.log havg_profiles_sgs.log
+#erf.profile_int = 500 # output interval in number of timesteps
 #=========================================
        
 # PROBLEM PARAMETERS

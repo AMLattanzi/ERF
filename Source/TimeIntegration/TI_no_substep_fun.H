@@ -118,6 +118,52 @@
                                                   + slow_dt * fslow[IntVar::zmom](i,j,k);
                     });
                 }
+
+                // OUTPUT L2 NORM (1 proc, no tiling)
+                const Real* prob_lo = fine_geom.ProbLo();
+                const Real* dx      = fine_geom.CellSize();
+                Real Delta          = std::pow(dx[0]*dx[1]*dx[2],1.0/3.0);
+
+                ParmParse pp("erf");
+                Real mu; pp.query("dynamicViscosity",mu);
+                Real Cs; pp.query("Cs",Cs);
+
+                amrex::Vector<amrex::Real> abl_pressure_grad_in = {0.0, 0.0, 0.0};
+                pp.queryarr("abl_pressure_grad",abl_pressure_grad_in);
+                Real Px = abl_pressure_grad_in[0];
+
+                Real Factor = mu / (Cs * Cs * Delta * Delta);
+
+                Vector<Real> C0_arr = {605551.4603806001,  38115.76743991355, 2449.4399999999982, 169.90632344067848};
+                Vector<Real> C1_arr = {3250.1208744082833, 811.5733178848386, 201.95839999999998, 49.63299783004268};
+                Vector<Real> dz_arr = {1./64., 1./32., 1./16., 1./8.};
+
+                Real C0, C1;
+                for (int i(0); i<C0_arr.size(); ++i) {
+                    if (std::abs(dx[2] - dz_arr[i]) < 1.0e-6){
+                        C0 = C0_arr[i];
+                        C1 = C1_arr[i];
+                    }
+                }
+
+                Real sum(0.);
+                ParallelFor(tbx, [=, &sum] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+                {
+                    Real z = prob_lo[2] + (k + 0.5) * dx[2];
+
+                    Real Tmp1 = -Factor * z;
+                    Real Tmp2 = (Cs * Cs * Delta * Delta) / (3.0 * Px);
+                    Real Tmp3 = 2.0 / (Cs * Cs * Delta * Delta) * Px * z;
+                    Real Tmp4 = std::pow(Factor,2.0);
+                    Real u_ref = Tmp1 + Tmp2 * std::pow(Tmp3 + Tmp4 + C1,1.5) + C0;
+                    Real u_sol = ssum[IntVar::xmom](i,j,k);
+                    Real mag   = std::sqrt( (u_sol - u_ref) * (u_sol - u_ref) );
+
+                    sum +=  mag;
+                });
+                amrex::Print() << "\n";
+                amrex::Print() << "L2: " << dx[1] * dx[2] * dx[2] * sum <<  ' ' << sum / Real(tbx.numPts())<<"\n";
+                amrex::Print(amrex::ErrorStream()) << dx[1] * dx[2] * dx[2] * sum << ',' <<"\n";
             }
         }
 
