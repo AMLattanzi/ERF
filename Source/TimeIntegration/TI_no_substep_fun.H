@@ -119,6 +119,7 @@
                     });
                 }
 
+                /*
                 // OUTPUT L2 NORM (1 proc, no tiling)
                 const Real* prob_lo = fine_geom.ProbLo();
                 const Real* dx      = fine_geom.CellSize();
@@ -165,6 +166,7 @@
                 amrex::Print() << "\n";
                 amrex::Print() << "L2: " << std::sqrt(sum/total_vol) <<"\n";
                 amrex::Print(amrex::ErrorStream()) << std::sqrt(sum/total_vol) << ',' <<"\n";
+                */
             }
         }
 

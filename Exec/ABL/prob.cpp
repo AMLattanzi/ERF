@@ -207,7 +207,10 @@ init_custom_prob(
 
   // // ABL LawOfTheWall Hack (match AMR-Wind ICs)
   //========================================================
-  /*
+  const Real* prob_hi = geomdata.ProbHi();
+  const Real* prob_lo = geomdata.ProbLo();
+  const Real* dx      = geomdata.CellSize();
+
   ParmParse pp("erf");
   Real mu;     pp.query("dynamicViscosity",mu);
   Real re_tau; pp.query("re_tau",re_tau);
@@ -215,29 +218,33 @@ init_custom_prob(
   Real rho   = parms.rho_0;
   Real u_tau = mu * re_tau / (rho * 1.0);
   Real ytau  = mu / (u_tau * rho);
+
+  Real pert_fac  = parms.pert_factor;
+  Real pert_amp  = u_tau * pert_fac;
+  Real y_perturb = parms.pert_periods_V * 2.0 * PI / (prob_hi[1] - prob_lo[1]);
+  Real z_perturb = parms.pert_periods_W * 2.0 * PI / (prob_hi[2] - prob_lo[2]);
+
+
+  // Law of the wall IC
   ParallelFor(xbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
   {
-      const Real* prob_lo = geomdata.ProbLo();
-      const Real* dx      = geomdata.CellSize();
       Real h = prob_lo[2] + (k + 0.5) * dx[2];
       if (h > 1.0) {
           h = 2.0 - h;
       }
       Real hp = h / ytau;
-      x_vel(i, j, k) = u_tau * ( 1. / kappa * std::log1p(kappa * hp)
-                               + 7.8 * ( 1.0 - std::exp(-hp / 11.0)
-                                       - (hp / 11.0) * std::exp(-hp / 3.0)) );
+
+      x_vel(i, j, k)  = u_tau * ( 1. / kappa * std::log1p(kappa * hp)
+                                + 7.8 * ( 1.0 - std::exp(-hp / 11.0)
+                                        - (hp / 11.0) * std::exp(-hp / 3.0)) );
+      x_vel(i, j, k) += pert_fac * std::sin(z_perturb * h);
   });
-  */
 
 
-  // Analytical solution
-  const Real* prob_lo = geomdata.ProbLo();
-  const Real* dx      = geomdata.CellSize();
-  Real Delta          = std::pow(dx[0]*dx[1]*dx[2],1.0/3.0);
 
-  ParmParse pp("erf");
-  Real mu; pp.query("dynamicViscosity",mu);
+  /*
+  // Analytical solution (convergence study)
+  Real Delta = std::pow(dx[0]*dx[1]*dx[2],1.0/3.0);
   Real Cs; pp.query("Cs",Cs);
 
   amrex::Vector<amrex::Real> abl_pressure_grad_in = {0.0, 0.0, 0.0};
@@ -261,24 +268,31 @@ init_custom_prob(
   ParallelFor(xbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
   {
       Real z = prob_lo[2] + (k + 0.5) * dx[2];
-
       Real Tmp1 = -Factor * z;
       Real Tmp2 = (Cs * Cs * Delta * Delta) / (3.0 * Px);
       Real Tmp3 = 2.0 / (Cs * Cs * Delta * Delta) * Px * z;
       Real Tmp4 = std::pow(Factor,2.0);
 
-      x_vel(i, j, k) = Tmp1 + Tmp2 * std::pow(Tmp3 + Tmp4 + C1,1.5) + C0;
+      x_vel(i, j, k)  = Tmp1 + Tmp2 * std::pow(Tmp3 + Tmp4 + C1,1.5) + C0;
+      x_vel(i, j, k) += pert_fac * std::sin(z_perturb * z);
   });
+  */
 
 
   ParallelFor(ybx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
   {
-      y_vel(i, j, k) = 0.0;
+      const amrex::Real y = prob_lo[1] + (j + 0.0) * dx[1];
+      const amrex::Real z = prob_lo[2] + (k + 0.5) * dx[2];
+      const amrex::Real perty = pert_amp * std::sin(y_perturb * y) * std::cos(z_perturb * z);
+      y_vel(i, j, k) = perty;
   });
 
   ParallelFor(zbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
   {
-      z_vel(i, j, k) = 0.0;
+      const amrex::Real y = prob_lo[1] + (j + 0.5) * dx[1];
+      const amrex::Real z = prob_lo[2] + (k + 0.0) * dx[2];
+      const amrex::Real pertz = -pert_amp * std::cos(y_perturb * y) * std::sin(z_perturb * z);
+      z_vel(i, j, k) = pertz;
   });
 
 }
@@ -327,10 +341,13 @@ amrex_probinit(
   pp.query("W_0_Pert_Mag", parms.W_0_Pert_Mag);
   pp.query("T_0_Pert_Mag", parms.T_0_Pert_Mag);
 
+  pp.query("pert_factor", parms.pert_factor);
   pp.query("pert_deltaU", parms.pert_deltaU);
   pp.query("pert_deltaV", parms.pert_deltaV);
+  pp.query("pert_deltaW", parms.pert_deltaW);
   pp.query("pert_periods_U", parms.pert_periods_U);
   pp.query("pert_periods_V", parms.pert_periods_V);
+  pp.query("pert_periods_W", parms.pert_periods_W);
   pp.query("pert_ref_height", parms.pert_ref_height);
   parms.aval = parms.pert_periods_U * 2.0 * PI / (probhi[1] - problo[1]);
   parms.bval = parms.pert_periods_V * 2.0 * PI / (probhi[0] - problo[0]);

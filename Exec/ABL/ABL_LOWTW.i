@@ -81,7 +81,7 @@ erf.les_type         = "Smagorinsky"
 erf.Cs               = 0.1
 
 # Specified Re_tau
-erf.re_tau = 180.0
+erf.re_tau = 18.0 #180.0
 
 # NOTE: useful relations
 #-----------------------
@@ -105,6 +105,6 @@ prob.T_0 = 300.0
 
 # Higher values of perturbations lead to instability
 # Instability seems to be coming from BC
-prob.U_0_Pert_Mag = 0.0
-prob.V_0_Pert_Mag = 0.0 
-prob.W_0_Pert_Mag = 0.0
+prob.pert_factor    = 0.1 
+prob.pert_periods_V = 0.0
+prob.pert_periods_W = 4.0

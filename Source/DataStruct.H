@@ -277,8 +277,8 @@ struct SolverChoice {
         amrex::Print() << "Channel balance using tau13: " << tauw_13
                        << " expected value is: " << tau_wall << "\n";
         amrex::Print() << "\n";
-        //AMREX_ASSERT_WITH_MESSAGE(std::abs(tauw_13 - tau_wall) < tol,
-        //                          "Error in momentum balance: Px != tau_wall");
+        AMREX_ASSERT_WITH_MESSAGE(std::abs(tauw_13 - tau_wall) < tol,
+                                  "Error in momentum balance: Px != tau_wall");
     }
 
     void display()
