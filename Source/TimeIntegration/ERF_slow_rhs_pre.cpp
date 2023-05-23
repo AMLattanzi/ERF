@@ -140,6 +140,22 @@ void erf_slow_rhs_pre (int /*level*/, int nrk,
 
     const GpuArray<Real, AMREX_SPACEDIM> dxInv = geom.InvCellSizeArray();
 
+    const GpuArray<Real, AMREX_SPACEDIM> dx = geom.CellSizeArray();
+    /*
+    // ABL LoTW
+    const GpuArray<Real, AMREX_SPACEDIM> dx = geom.CellSizeArray();
+    PlaneAverage u_avg(&xvel, geom, 2);
+    PlaneAverage v_avg(&yvel, geom, 2);
+    u_avg.compute_averages(ZDir(), u_avg.field());
+    v_avg.compute_averages(ZDir(), v_avg.field());
+    Real umean = u_avg.line_average_interpolated(dx[2]/2.0, 0);
+    Real vmean = v_avg.line_average_interpolated(dx[2]/2.0, 0);
+    Real wspmean = std::sqrt(umean*umean + vmean*vmean);
+    amrex::Print() << "\n";
+    amrex::Print() << "VALS: " << umean << ' ' << vmean << ' ' << wspmean << "\n";
+    amrex::Print() << "\n";
+    */
+
     // *************************************************************************
     // Combine external forcing terms
     // *************************************************************************
@@ -449,10 +465,45 @@ void erf_slow_rhs_pre (int /*level*/, int nrk,
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
                     if(k==0) {
+                        Real wsp   = std::sqrt(u(i,j,k)*u(i,j,k) + v(i,j,k)*v(i,j,k));
+                        Real mu    = solverChoice.dynamicViscosity;
+                        Real kappa = 0.384;
+                        Real B     = 4.27;
+                        Real zref  = dx[2]/2.0;
+                        Real utau  = 0.01*wsp;
+                        Real wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
+                        Real resid    = wsp_pred - wsp;
+                        int iter = 0;
+                        while (std::abs(resid) > 1.0e-12) {
+                            Real deriv = (1.0/kappa) * (1.0 + std::log(zref*utau/mu)) + B;
+                            utau -= resid / deriv;
+                            wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
+                            resid = wsp_pred - wsp;
+                            ++iter;
+                        }
+                        tau13(i,j,k) = -utau*utau * u(i,j,k) / wsp;
+
+                        if(i==0 && j==0)
+                            amrex::Print() << "tau13: "
+                                           << IntVect(i,j,k) << ' '
+                                           << tau13(i,j,k) << ' '
+                                           << s13(i,j,k+1) << ' '
+                                           << utau << ' '
+                                           << mu_turb(i,j,k) << ' '
+                                           << mu_turb(i,j,k+1) << ' '
+                                           << mu_turb(i,j,k+2) <<"\n";
+
+                    } else {
+                        tau13(i,j,k) = s13(i,j,k);
+                    }
+
+                    /*
+                    if(k==0) {
                         tau13(i,j,k) = -solverChoice.tauw_13; // -mu *du/dz convention
                     } else {
                         tau13(i,j,k) = s13(i,j,k);
                     }
+                    */
 
                     /*
                     if(i==1 && j==1 && k<5)
@@ -461,10 +512,33 @@ void erf_slow_rhs_pre (int /*level*/, int nrk,
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
                     if(k==0) {
+                        Real wsp   = std::sqrt(u(i,j,k)*u(i,j,k) + v(i,j,k)*v(i,j,k));
+                        Real mu    = solverChoice.dynamicViscosity;
+                        Real kappa = 0.384;
+                        Real B     = 4.27;
+                        Real zref  = dx[2]/2.0;
+                        Real utau  = 0.01*wsp;
+                        Real wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
+                        Real resid    =  wsp_pred - wsp;
+                        int iter = 0;
+                        while (std::abs(resid) > 1.0e-6) {
+                            Real deriv = (1.0/kappa) * (1.0 + std::log(zref*utau/mu)) + B;
+                            utau -= resid / deriv;
+                            wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
+                            resid = wsp_pred - wsp;
+                            ++iter;
+                        }
+                        tau23(i,j,k) = -utau*utau * v(i,j,k) / wsp;
+                    } else {
+                        tau23(i,j,k) = s23(i,j,k);
+                    }
+                    /*
+                    if(k==0) {
                         tau23(i,j,k) = 0.;
                     } else {
                         tau23(i,j,k) = s23(i,j,k);
                     }
+                    */
                 });
                 } // end profile
             } // l_use_terrain
@@ -744,6 +818,7 @@ void erf_slow_rhs_pre (int /*level*/, int nrk,
                            rho_u    , rho_v    , omega_arr,
                            z_nd, detJ_arr, dxInv, mf_m, mf_u, mf_v, l_all_WENO, l_spatial_order_WENO,
                            l_horiz_spatial_order, l_vert_spatial_order, l_use_terrain, domhi_z);
+        amrex::Print() << "RHS ADV: " << rho_u_rhs(0,0,0) << "\n";
 
         if (l_use_diff) {
             if (l_use_terrain) {
@@ -762,8 +837,10 @@ void erf_slow_rhs_pre (int /*level*/, int nrk,
                                      tau12, tau13, tau23,
                                      cell_data, solverChoice, dxInv,
                                      mf_m, mf_u, mf_v);
+
             }
         }
+        amrex::Print() << "RHS DIFF: " << rho_u_rhs(0,0,0) << "\n";
 
         if (l_use_ndiff) {
             NumericalDiffusion(tbx, 0, 1, dt, solverChoice,
@@ -863,6 +940,9 @@ void erf_slow_rhs_pre (int /*level*/, int nrk,
               rho_u_rhs(i, j, k) += -gpx / (1.0 + q)
                                   - solverChoice.abl_pressure_grad[0]
                                   + 0.5*(cell_data(i,j,k,Rho_comp)+cell_data(i-1,j,k,Rho_comp)) * solverChoice.abl_geo_forcing[0];
+
+              if(i==0 && j==0 && k==0)
+                  amrex::Print() << "RHS Px: " << rho_u_rhs(0,0,0) << ' ' << -solverChoice.abl_pressure_grad[0] << "\n";
 
               // Add Coriolis forcing (that assumes east is +x, north is +y)
               if (solverChoice.use_coriolis)

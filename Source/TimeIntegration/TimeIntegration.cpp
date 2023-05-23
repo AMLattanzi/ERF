@@ -182,7 +182,7 @@ void ERF::erf_advance(int level,
 
                 // Use one-sided difference (aliased half dz off of face)
                 amrex::Real GradUz = 0.5 * ( 4.0 * u(i,j,k+1) - u(i,j,k+2) - 3.0 * u(i,j,k) ) * dxInv[2];
-                tau13(i,j,k) = 0.5 * ( GradUz + (w(i, j, k) - w(i-1, j, k))*dxInv[0] );
+                tau13(i,j,k) = 0.5 * ( GradUz );
 
 
                 /*

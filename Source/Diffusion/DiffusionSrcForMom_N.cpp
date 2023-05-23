@@ -85,6 +85,15 @@ DiffusionSrcForMom_N (const Box& bxx, const Box& bxy , const Box& bxz,
             rho_u_rhs(i,j,k) -= ( (tau11(i  , j  , k  ) - tau11(i-1, j  ,k  )) * dxinv * mf   // Contribution to x-mom eqn from diffusive flux in x-dir
                                 + (tau12(i  , j+1, k  ) - tau12(i  , j  ,k  )) * dyinv * mf   // Contribution to x-mom eqn from diffusive flux in y-dir
                                 + (tau13(i  , j  , k+1) - tau13(i  , j  ,k  )) * dzinv );     // Contribution to x-mom eqn from diffusive flux in z-dir;
+
+            if(i==0 && j==0 && k==0)
+                amrex::Print() << "DIFF SRC: "
+                               << (tau11(i  , j  , k  ) - tau11(i-1, j  ,k  )) * dxinv << ' '
+                               << (tau12(i  , j+1, k  ) - tau12(i  , j  ,k  )) * dyinv << ' '
+                               << (tau13(i  , j  , k+1) - tau13(i  , j  ,k  )) * dzinv << ' '
+                               << tau13(i  , j  , k  ) << ' '
+                               << tau13(i  , j  , k+1) << ' '
+                               << dzinv << "\n";
         },
         [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {

@@ -1,5 +1,5 @@
 # ------------------  INPUTS TO MAIN PROGRAM  -------------------
-max_step = 2500
+max_step = 90000
 
 amrex.fpe_trap_invalid = 1
 
@@ -12,15 +12,18 @@ fabarray.mfiter_tile_size = 1024 1024 1024
 #geometry.prob_extent =  12.0     1.0    1.0
 #amr.n_cell           =   384      32     32
 
+geometry.prob_extent =  0.5     0.5    1.0
+amr.n_cell           =  16      16     32
+
 # CONVERGENCE
 #======================================
 #geometry.prob_extent =  0.5     0.5    1.0
 #amr.n_cell           =  32      32     64
 #zhi.velocity = 0.5664029656909406 0 0
     
-geometry.prob_extent =  0.5     0.5    1.0
-amr.n_cell           =  16      16     32
-zhi.velocity = 0.5646234542509774 0 0
+#geometry.prob_extent =  0.5     0.5    1.0
+#amr.n_cell           =  16      16     32
+#zhi.velocity = 0.5646234542509774 0 0
 
 #geometry.prob_extent =  0.5     0.5    1.0
 #amr.n_cell           =  8      8     16
@@ -36,13 +39,13 @@ geometry.is_periodic = 1 1 0
 #zlo.velocity = 1 1 0 (fcompare w/ & w/o this passed) 
 zlo.type = "NoSlipWall"
     
-#zhi.type = "SlipWall"
-zhi.type = "NoSlipWall"
+zhi.type = "SlipWall"
+#zhi.type = "NoSlipWall"
  
 
 # TIME STEP CONTROL
 erf.no_substepping = 1
-erf.fixed_dt       = 0.005  # fixed time step depending on grid resolution
+erf.fixed_dt       = 0.00008  # fixed time step depending on grid resolution
 
 # DIAGNOSTICS & VERBOSITY
 erf.sum_interval   = 1       # timesteps between computing mass
@@ -54,11 +57,11 @@ amr.max_level       = 0       # maximum level number allowed
 
 # CHECKPOINT FILES
 erf.check_file      = chk        # root name of checkpoint file
-erf.check_int       = 2500       # number of timesteps between checkpoints
+erf.check_int       = 10000       # number of timesteps between checkpoints
 
 # PLOTFILES
 erf.plot_file_1     = plt        # prefix of plotfile name
-erf.plot_int_1      = 1000        # number of timesteps between plotfiles
+erf.plot_int_1      = 10000        # number of timesteps between plotfiles
 erf.plot_vars_1     = density rhoadv_0 x_velocity y_velocity z_velocity pressure temp theta
 
 # SOLVER CHOICE
@@ -69,19 +72,20 @@ erf.alpha_C = 1.0
 #=========================================
 # Pressure gradient driven flow
 erf.abl_driver_type   = "PressureGradient"
-erf.abl_pressure_grad = -0.003969 0 0    # Negative to force flow left -> right
-
+#erf.abl_pressure_grad = -0.003969 0 0    # Negative to force flow left -> right
+erf.abl_pressure_grad = -0.00173056 0 0    # Negative to force flow left -> right
+    
 # No gravity to get const rho field
 erf.use_gravity = false
 
 # Constant molecular viscosity and Smag model
 erf.molec_diff_type  = "Constant"
-erf.dynamicViscosity = 3.5e-3 # 3.5e-4
+erf.dynamicViscosity = 8.0e-6 #3.5e-3 # 3.5e-4
 erf.les_type         = "Smagorinsky"
 erf.Cs               = 0.1
 
 # Specified Re_tau
-erf.re_tau = 18.0 #180.0
+erf.re_tau = 5200.0 #18.0 #180.0
 
 # NOTE: useful relations
 #-----------------------
@@ -90,8 +94,8 @@ erf.re_tau = 18.0 #180.0
 # (mu * re_tau)^2 = tau_wall = P_x * L_z
 
 # Output for postprocessing
-#erf.data_log = scalar_hist.log havg_profiles_mean.log havg_profiles_covar.log havg_profiles_sgs.log
-#erf.profile_int = 500 # output interval in number of timesteps
+erf.data_log    = scalar_hist.log havg_profiles_mean.log havg_profiles_covar.log havg_profiles_sgs.log
+erf.profile_int = 10000 # output interval in number of timesteps
 #=========================================
        
 # PROBLEM PARAMETERS
@@ -105,6 +109,6 @@ prob.T_0 = 300.0
 
 # Higher values of perturbations lead to instability
 # Instability seems to be coming from BC
-prob.pert_factor    = 0.1 
+prob.pert_factor    = 0.1 #0.1 
 prob.pert_periods_V = 0.0
 prob.pert_periods_W = 4.0
