@@ -20,6 +20,8 @@
 #include <MultiBlockContainer.H>
 #endif
 
+#include <AMReX_PlotFileUtil.H>
+
 using namespace amrex;
 
 amrex::Real ERF::startCPUTime        = 0.0;
@@ -406,6 +408,43 @@ ERF::InitData ()
         for (int lev = 0; lev <= finest_level; lev++)
             init_only(lev, time);
 
+
+        
+        // HACK HACK HACK
+        // Read AMRW plotfile to init fields
+        PlotFileData pf_a("plt211000");
+        const MultiFab& mf_xvel = pf_a.get(0,"velocityx");
+        const MultiFab& mf_yvel = pf_a.get(0,"velocityy");
+        const MultiFab& mf_zvel = pf_a.get(0,"velocityz");
+        for (MFIter mfi(vars_new[0][Vars::cons], TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+            const Box& tbx = mfi.tilebox(IntVect(1,0,0));
+            const Box& tby = mfi.tilebox(IntVect(0,1,0));
+            const Box& tbz = mfi.tilebox(IntVect(0,0,1));
+
+            const auto& xvel_arr = mf_xvel.array(mfi);
+            const auto& yvel_arr = mf_yvel.array(mfi);
+            const auto& zvel_arr = mf_zvel.array(mfi);
+
+            const auto& u = vars_new[0][Vars::xvel].array(mfi);
+            const auto& v = vars_new[0][Vars::yvel].array(mfi);
+            const auto& w = vars_new[0][Vars::zvel].array(mfi);
+
+            amrex::ParallelFor(tbx,tby,tbz,
+            [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
+                u(i,j,k) = xvel_arr(std::min(i,31),j,k);
+            },
+            [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
+                v(i,j,k) = yvel_arr(i,std::min(j,31),k);
+            },
+            [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
+                w(i,j,k) = zvel_arr(i,j,std::min(k,31));
+            });
+        }
+        vars_old[0][Vars::xvel].ParallelCopy(vars_new[0][Vars::xvel]);
+        vars_old[0][Vars::yvel].ParallelCopy(vars_new[0][Vars::yvel]);
+        vars_old[0][Vars::zvel].ParallelCopy(vars_new[0][Vars::zvel]);
+        
+        
         // We initialize rho_KE to be nonzero (and positive) so that we end up
         // with reasonable values for the eddy diffusivity and the MOST fluxes
         // (~ 1/diffusivity) do not blow up

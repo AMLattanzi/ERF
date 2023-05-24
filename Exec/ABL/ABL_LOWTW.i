@@ -1,5 +1,5 @@
 # ------------------  INPUTS TO MAIN PROGRAM  -------------------
-max_step = 90000
+max_step = 5000
 
 amrex.fpe_trap_invalid = 1
 
@@ -12,8 +12,8 @@ fabarray.mfiter_tile_size = 1024 1024 1024
 #geometry.prob_extent =  12.0     1.0    1.0
 #amr.n_cell           =   384      32     32
 
-geometry.prob_extent =  0.5     0.5    1.0
-amr.n_cell           =  16      16     32
+geometry.prob_extent =  1.0     1.0    1.0
+amr.n_cell           =  32      32     32
 
 # CONVERGENCE
 #======================================
@@ -45,7 +45,7 @@ zhi.type = "SlipWall"
 
 # TIME STEP CONTROL
 erf.no_substepping = 1
-erf.fixed_dt       = 0.00008  # fixed time step depending on grid resolution
+erf.fixed_dt       = 0.00001  # fixed time step depending on grid resolution
 
 # DIAGNOSTICS & VERBOSITY
 erf.sum_interval   = 1       # timesteps between computing mass
@@ -57,11 +57,11 @@ amr.max_level       = 0       # maximum level number allowed
 
 # CHECKPOINT FILES
 erf.check_file      = chk        # root name of checkpoint file
-erf.check_int       = 10000       # number of timesteps between checkpoints
+erf.check_int       = 5000       # number of timesteps between checkpoints
 
 # PLOTFILES
 erf.plot_file_1     = plt        # prefix of plotfile name
-erf.plot_int_1      = 10000        # number of timesteps between plotfiles
+erf.plot_int_1      = 1000         # number of timesteps between plotfiles
 erf.plot_vars_1     = density rhoadv_0 x_velocity y_velocity z_velocity pressure temp theta
 
 # SOLVER CHOICE
@@ -95,7 +95,7 @@ erf.re_tau = 5200.0 #18.0 #180.0
 
 # Output for postprocessing
 erf.data_log    = scalar_hist.log havg_profiles_mean.log havg_profiles_covar.log havg_profiles_sgs.log
-erf.profile_int = 10000 # output interval in number of timesteps
+erf.profile_int = 1000 # output interval in number of timesteps
 #=========================================
        
 # PROBLEM PARAMETERS
@@ -109,6 +109,6 @@ prob.T_0 = 300.0
 
 # Higher values of perturbations lead to instability
 # Instability seems to be coming from BC
-prob.pert_factor    = 0.1 #0.1 
+prob.pert_factor    = 0.0 #0.1 
 prob.pert_periods_V = 0.0
 prob.pert_periods_W = 4.0
