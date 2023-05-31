@@ -20,10 +20,13 @@ struct ProbParm {
   amrex::Real T_0_Pert_Mag = 0.0; // perturbation to rho*Theta
 
   // divergence-free initial perturbations
+  amrex::Real pert_factor = 0.0;
   amrex::Real pert_deltaU = 0.0;
   amrex::Real pert_deltaV = 0.0;
+  amrex::Real pert_deltaW = 0.0;
   amrex::Real pert_periods_U = 5.0;
   amrex::Real pert_periods_V = 5.0;
+  amrex::Real pert_periods_W = 5.0;
   amrex::Real pert_ref_height = 100.0;
 
   // rayleigh damping

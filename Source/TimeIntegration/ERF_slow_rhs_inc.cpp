@@ -139,6 +139,7 @@ void erf_slow_rhs_inc (int /*level*/, int nrk,
     const int domhi_z = domain.bigEnd()[2];
 
     const GpuArray<Real, AMREX_SPACEDIM> dxInv = geom.InvCellSizeArray();
+    const GpuArray<Real, AMREX_SPACEDIM> dx = geom.CellSizeArray();
 
     // *************************************************************************
     // Combine external forcing terms
@@ -448,10 +449,66 @@ void erf_slow_rhs_inc (int /*level*/, int nrk,
                     tau12(i,j,k) = s12(i,j,k);
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-                    tau13(i,j,k) = s13(i,j,k);
+                    if(k==0) {
+                        Real wsp   = std::sqrt(u(i,j,k)*u(i,j,k) + v(i,j,k)*v(i,j,k));
+                        Real mu    = solverChoice.dynamicViscosity;
+                        Real kappa = 0.384;
+                        Real B     = 4.27;
+                        Real zref  = dx[2]/2.0;
+                        Real utau  = 0.01*wsp;
+                        Real wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
+                        Real resid    = wsp_pred - wsp;
+                        while (std::abs(resid) > 1.0e-12) {
+                            Real deriv = (1.0/kappa) * (1.0 + std::log(zref*utau/mu)) + B;
+                            utau -= resid / deriv;
+                            wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
+                            resid = wsp_pred - wsp;
+                        }
+                        tau13(i,j,k) = -utau*utau * u(i,j,k) / wsp;
+                    } else {
+                        tau13(i,j,k) = s13(i,j,k);
+                    }
+
+                    /*
+                    if(k==0) {
+                        tau13(i,j,k) = -solverChoice.tauw_13; // -mu *du/dz convention
+                    } else {
+                        tau13(i,j,k) = s13(i,j,k);
+                    }
+                    */
+
+                    //tau13(i,j,k) = s13(i,j,k);
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-                    tau23(i,j,k) = s23(i,j,k);
+                    if(k==0) {
+                        Real wsp   = std::sqrt(u(i,j,k)*u(i,j,k) + v(i,j,k)*v(i,j,k));
+                        Real mu    = solverChoice.dynamicViscosity;
+                        Real kappa = 0.384;
+                        Real B     = 4.27;
+                        Real zref  = dx[2]/2.0;
+                        Real utau  = 0.01*wsp;
+                        Real wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
+                        Real resid    =  wsp_pred - wsp;
+                        while (std::abs(resid) > 1.0e-6) {
+                            Real deriv = (1.0/kappa) * (1.0 + std::log(zref*utau/mu)) + B;
+                            utau -= resid / deriv;
+                            wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
+                            resid = wsp_pred - wsp;
+                        }
+                        tau23(i,j,k) = -utau*utau * v(i,j,k) / wsp;
+                    } else {
+                        tau23(i,j,k) = s23(i,j,k);
+                    }
+
+                    /*
+                    if(k==0) {
+                        tau23(i,j,k) = 0.;
+                    } else {
+                        tau23(i,j,k) = s23(i,j,k);
+                    }
+                    */
+
+                    //tau23(i,j,k) = s23(i,j,k);
                 });
                 } // end profile
             } // l_use_terrain

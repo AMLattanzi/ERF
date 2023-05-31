@@ -362,8 +362,11 @@ void erf_slow_rhs_post (int /*level*/, Real dt,
             [=] AMREX_GPU_DEVICE (int i, int j, int k, int nn) noexcept {
                 const int n = start_comp + nn;
                 cell_rhs(i,j,k,n) += src_arr(i,j,k,n);
-                cur_cons(i,j,k,n) = old_cons(i,j,k,n) + dt * cell_rhs(i,j,k,n);
 
+                // ABL LOTW HACK
+                //--------------
+                //cur_cons(i,j,k,n) = old_cons(i,j,k,n) + dt * cell_rhs(i,j,k,n);
+                cur_cons(i,j,k,n) = 0.;
             });
 
             if (l_use_deardorff) {
