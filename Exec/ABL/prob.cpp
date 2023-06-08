@@ -236,7 +236,7 @@ init_custom_prob(
       x_vel(i, j, k)  = u_tau * ( 1. / kappa * std::log1p(kappa * hp)
                                 + 7.8 * ( 1.0 - std::exp(-hp / 11.0)
                                         - (hp / 11.0) * std::exp(-hp / 3.0)) );
-      x_vel(i, j, k) += pert_fac * std::sin(z_perturb * h);
+      //x_vel(i, j, k) += pert_fac * std::sin(z_perturb * h);
   });
 
 

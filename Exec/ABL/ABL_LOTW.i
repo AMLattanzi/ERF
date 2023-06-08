@@ -47,6 +47,8 @@ zhi.type = "SlipWall"
 erf.no_substepping = 1
 erf.incompressible = 1
 erf.fixed_dt       = 0.01  # fixed time step depending on grid resolution
+erf.horiz_spatial_order = 5
+erf.vert_spatial_order  = 5
 
 # DIAGNOSTICS & VERBOSITY
 erf.sum_interval   = 1       # timesteps between computing mass
@@ -74,7 +76,7 @@ erf.alpha_C = 1.0
 # Pressure gradient driven flow
 erf.abl_driver_type   = "PressureGradient"
 #erf.abl_pressure_grad = -0.003969 0 0    # Negative to force flow left -> right
-erf.abl_pressure_grad = -0.00173056 0 0    # Negative to force flow left -> right
+erf.abl_pressure_grad = -0.001722 0 0    # Negative to force flow left -> right
     
 # No gravity to get const rho field
 erf.use_gravity = false

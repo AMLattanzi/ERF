@@ -105,6 +105,9 @@
                         const int n = scomp_fast[IntVar::cons] + nn;
                         ssum[IntVar::cons](i,j,k,n) = sold[IntVar::cons](i,j,k,n) + slow_dt *
                            ( fslow[IntVar::cons](i,j,k,n) );
+
+                        if(n==0) ssum[IntVar::cons](i,j,k,n) = 1.0;
+                        if(n==1) ssum[IntVar::cons](i,j,k,n) = 300.0;
                     });
                     ParallelFor(tbx, tby, tbz,
                     [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {

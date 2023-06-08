@@ -41,7 +41,8 @@ ComputeSmnSmn (int& i, int& j, int& k,
                                 + tau23(i  , j+1, k  ) + tau23(i  , j+1, k+1) );
 
     // ABL LawOfTheWall hack
-    if(k==0) s13bar = tau13(i  , j  , k  );
+    if(k==0) s13bar = 0.5 * ( tau13(i  , j  , k  ) + tau13(i+1, j  , k  ) );
+    if(k==0) s23bar = 0.5 * ( tau23(i  , j  , k  ) + tau23(i  , j+1, k  ) );
 
     amrex::Real SmnSmn = s11bar*s11bar + s22bar*s22bar + s33bar*s33bar
                        + 2.0*s12bar*s12bar + 2.0*s13bar*s13bar + 2.0*s23bar*s23bar;

@@ -450,7 +450,8 @@ void erf_slow_rhs_inc (int /*level*/, int nrk,
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
                     if(k==0) {
-                        Real wsp   = std::sqrt(u(i,j,k)*u(i,j,k) + v(i,j,k)*v(i,j,k));
+                        Real v_if  = 0.25 * ( v(i,j,k) + v(i-1,j,k) + v(i,j+1,k) + v(i-1,j+1,k) );
+                        Real wsp   = std::sqrt(u(i,j,k)*u(i,j,k) + v_if*v_if);
                         Real mu    = solverChoice.dynamicViscosity;
                         Real kappa = 0.384;
                         Real B     = 4.27;
@@ -458,7 +459,7 @@ void erf_slow_rhs_inc (int /*level*/, int nrk,
                         Real utau  = 0.01*wsp;
                         Real wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
                         Real resid    = wsp_pred - wsp;
-                        while (std::abs(resid) > 1.0e-12) {
+                        while (std::abs(resid) > 1.0e-6) {
                             Real deriv = (1.0/kappa) * (1.0 + std::log(zref*utau/mu)) + B;
                             utau -= resid / deriv;
                             wsp_pred = utau * (std::log(zref*utau/mu) / kappa + B);
@@ -481,7 +482,8 @@ void erf_slow_rhs_inc (int /*level*/, int nrk,
                 },
                 [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
                     if(k==0) {
-                        Real wsp   = std::sqrt(u(i,j,k)*u(i,j,k) + v(i,j,k)*v(i,j,k));
+                        Real u_jf  = 0.25 * ( u(i,j,k) + u(i,j-1,k) + u(i+1,j,k) + u(i+1,j-1,k) );
+                        Real wsp   = std::sqrt(u_jf*u_jf + v(i,j,k)*v(i,j,k));
                         Real mu    = solverChoice.dynamicViscosity;
                         Real kappa = 0.384;
                         Real B     = 4.27;
@@ -514,9 +516,6 @@ void erf_slow_rhs_inc (int /*level*/, int nrk,
             } // l_use_terrain
         } // MFIter
     } // l_use_diff
-
-    // HACK FOR PRINTING
-    S_rhs[IntVar::cons].setVal(0.);
 
     // *************************************************************************
     // Define updates and fluxes in the current RK stage
