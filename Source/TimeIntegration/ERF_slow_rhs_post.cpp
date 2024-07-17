@@ -204,7 +204,7 @@ void erf_slow_rhs_post (int level, int finest_level,
         // *************************************************************************
         // Define Array4's
         // *************************************************************************
-        const Array4<      Real> & old_cons   = S_old[IntVars::cons].array(mfi);
+        const Array4<const Real> & old_cons   = S_old[IntVars::cons].array(mfi);
         const Array4<      Real> & cell_rhs   = S_rhs[IntVars::cons].array(mfi);
 
         const Array4<      Real> & new_cons  = S_new[IntVars::cons].array(mfi);
@@ -341,7 +341,7 @@ void erf_slow_rhs_post (int level, int finest_level,
                 }
 
                 AdvectionSrcForScalars(tbx, start_comp, num_comp, avg_xmom, avg_ymom, avg_zmom,
-                                       cur_prim, cell_rhs,
+                                       old_cons, cur_prim, cell_rhs,
                                        detJ_arr,
                                        dxInv, mf_m,
                                        horiz_adv_type, vert_adv_type,
@@ -430,6 +430,8 @@ void erf_slow_rhs_post (int level, int finest_level,
                         } else if (ivar == RhoQKE_comp) {
                             cur_cons(i,j,k,n) = amrex::max(cur_cons(i,j,k,n), 1e-12);
                         }
+
+                        if (n==RhoQ2_comp && cur_cons(i,j,k,n)<0.0) cur_cons(i,j,k,n) = 0.0;
                     });
 
                 } // moving or not?

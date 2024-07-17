@@ -121,6 +121,7 @@ AdvectionSrcForScalars (const Box& bx, const int icomp, const int ncomp,
                         const Array4<const Real>& avg_xmom,
                         const Array4<const Real>& avg_ymom,
                         const Array4<const Real>& avg_zmom,
+                        const Array4<const Real>& old_cons,
                         const Array4<const Real>& cell_prim,
                         const Array4<Real>& advectionSrc,
                         const Array4<const Real>& detJ,
@@ -247,6 +248,56 @@ AdvectionSrcForScalars (const Box& bx, const int icomp, const int ncomp,
             AMREX_ASSERT_WITH_MESSAGE(false, "Unknown advection scheme!");
         }
     }
+
+    // MONTONE 0th UPWIND: DEBUG
+    ParallelFor(bx, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
+    {
+        const int cons_index = icomp + n;
+        const int prim_index = cons_index - 1;
+        Real RHS = -(
+          ( (flx_arr[0])(i+1,j  ,k  ,cons_index) - (flx_arr[0])(i,j,k,cons_index) ) * dxInv +
+          ( (flx_arr[1])(i  ,j+1,k  ,cons_index) - (flx_arr[1])(i,j,k,cons_index) ) * dyInv +
+          ( (flx_arr[2])(i  ,j  ,k+1,cons_index) - (flx_arr[2])(i,j,k,cons_index) ) * dzInv );
+
+        if (cons_index==RhoQ2_comp) {
+            Real tmp_upd = old_cons(i,j,k,cons_index) + 0.3*RHS;
+            if (tmp_upd<0.0) {
+                // HI
+                if (avg_xmom(i+1,j,k)>0.0) {
+                    (flx_arr[0])(i+1,j,k,cons_index) = avg_xmom(i+1,j,k) * cell_prim(i  ,j,k,prim_index);
+                } else {
+                    (flx_arr[0])(i+1,j,k,cons_index) = avg_xmom(i+1,j,k) * cell_prim(i+1,j,k,prim_index);
+                }
+                if (avg_ymom(i,j+1,k)>0.0) {
+                    (flx_arr[1])(i,j+1,k,cons_index) = avg_ymom(i,j+1,k) * cell_prim(i,j  ,k,prim_index);
+                } else {
+                    (flx_arr[1])(i,j+1,k,cons_index) = avg_ymom(i,j+1,k) * cell_prim(i,j+1,k,prim_index);
+                }
+                if (avg_zmom(i,j,k+1)>0.0) {
+                    (flx_arr[2])(i,j,k+1,cons_index) = avg_zmom(i,j,k+1) * cell_prim(i,j,k  ,prim_index);
+                } else {
+                    (flx_arr[2])(i,j,k+1,cons_index) = avg_zmom(i,j,k+1) * cell_prim(i,j,k+1,prim_index);
+                }
+
+                // LO
+                if (avg_xmom(i,j,k)>0.0) {
+                    (flx_arr[0])(i,j,k,cons_index) = avg_xmom(i,j,k) * cell_prim(i-1,j,k,prim_index);
+                } else {
+                    (flx_arr[0])(i,j,k,cons_index) = avg_xmom(i,j,k) * cell_prim(i  ,j,k,prim_index);
+                }
+                if (avg_ymom(i,j,k)>0.0) {
+                    (flx_arr[1])(i,j,k,cons_index) = avg_ymom(i,j,k) * cell_prim(i,j-1,k,prim_index);
+                } else {
+                    (flx_arr[1])(i,j,k,cons_index) = avg_ymom(i,j,k) * cell_prim(i,j  ,k,prim_index);
+                }
+                if (avg_zmom(i,j,k)>0.0) {
+                    (flx_arr[2])(i,j,k,cons_index) = avg_zmom(i,j,k) * cell_prim(i,j,k-1,prim_index);
+                } else {
+                    (flx_arr[2])(i,j,k,cons_index) = avg_zmom(i,j,k) * cell_prim(i,j,k  ,prim_index);
+                }
+            }
+        }
+    });
 
     ParallelFor(bx, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
     {

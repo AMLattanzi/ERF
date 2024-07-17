@@ -416,7 +416,7 @@ void erf_slow_rhs_pre (int level, int finest_level,
         int icomp = RhoTheta_comp; int ncomp = 1;
         AdvectionSrcForScalars(bx, icomp, ncomp,
                                avg_xmom, avg_ymom, avg_zmom,
-                               cell_prim, cell_rhs, detJ_arr,
+                               cell_old, cell_prim, cell_rhs, detJ_arr,
                                dxInv, mf_m,
                                l_horiz_adv_type, l_vert_adv_type,
                                l_horiz_upw_frac, l_vert_upw_frac,
