@@ -127,8 +127,6 @@ AdvectionSrcForScalars (const Real& dt,
                         const Array4<const Real>& cell_prim,
                         const Array4<Real>& advectionSrc,
                         const bool& use_mono_adv,
-                        Real* max_s_ptr,
-                        Real* min_s_ptr,
                         const Array4<const Real>& detJ,
                         const GpuArray<Real, AMREX_SPACEDIM>& cellSizeInv,
                         const Array4<const Real>& mf_m,
@@ -261,8 +259,16 @@ AdvectionSrcForScalars (const Real& dt,
             const int cons_index = icomp + n;
             const int prim_index = cons_index - 1;
 
-            Real max_val = max_s_ptr[cons_index];
-            Real min_val = min_s_ptr[cons_index];
+            Real max_val = cur_cons(i,j,k,cons_index);
+            Real min_val = cur_cons(i,j,k,cons_index);
+            for (int n(-1), inc(2); n<2; n+=inc) {
+                max_val = amrex::max(max_val,cur_cons(i+n,j  ,k  ,cons_index));
+                min_val = amrex::min(max_val,cur_cons(i+n,j  ,k  ,cons_index));
+                max_val = amrex::max(max_val,cur_cons(i  ,j+n,k  ,cons_index));
+                min_val = amrex::min(max_val,cur_cons(i  ,j+n,k  ,cons_index));
+                max_val = amrex::max(max_val,cur_cons(i  ,j  ,k+n,cons_index));
+                min_val = amrex::min(max_val,cur_cons(i  ,j  ,k+n,cons_index));
+            }
 
             Real invdetJ = (detJ(i,j,k) > 0.) ?  1. / detJ(i,j,k) : 1.;
             Real mfsq = mf_m(i,j,0) * mf_m(i,j,0);

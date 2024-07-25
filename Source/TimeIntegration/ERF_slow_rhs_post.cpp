@@ -165,32 +165,6 @@ void erf_slow_rhs_post (int level, int finest_level,
          is_valid_slow_var[RhoQ1_comp] = 1;
     }
 
-    // *****************************************************************************
-    // Monotonic advection for scalars
-    // *****************************************************************************
-    int nvar = S_new[IntVars::cons].nComp();
-    Vector<Real> max_scal(nvar, 1.0e34); Gpu::DeviceVector<Real> max_scal_d(nvar);
-    Vector<Real> min_scal(nvar,-1.0e34); Gpu::DeviceVector<Real> min_scal_d(nvar);
-    if (l_use_mono_adv) {
-        auto const& ma_s_arr = S_new[IntVars::cons].const_arrays();
-        for (int ivar(RhoKE_comp); ivar<nvar; ++ivar) {
-            GpuTuple<Real,Real> mm = ParReduce(TypeList<ReduceOpMax,ReduceOpMin>{},
-                                               TypeList<Real, Real>{},
-                                               S_new[IntVars::cons], IntVect(0),
-                [=] AMREX_GPU_DEVICE (int box_no, int i, int j, int k) noexcept
-                -> GpuTuple<Real,Real>
-                {
-                    return { ma_s_arr[box_no](i,j,k,ivar), ma_s_arr[box_no](i,j,k,ivar) };
-                });
-            max_scal[ivar] = get<0>(mm);
-            min_scal[ivar] = get<1>(mm);
-        }
-    }
-    Gpu::copy(Gpu::hostToDevice, max_scal.begin(), max_scal.end(), max_scal_d.begin());
-    Gpu::copy(Gpu::hostToDevice, min_scal.begin(), min_scal.end(), min_scal_d.begin());
-    Real* max_s_ptr = max_scal_d.data();
-    Real* min_s_ptr = min_scal_d.data();
-
     // *************************************************************************
     // Calculate cell-centered eddy viscosity & diffusivities
     //
@@ -369,9 +343,8 @@ void erf_slow_rhs_post (int level, int finest_level,
                 }
 
                 AdvectionSrcForScalars(dt, tbx, start_comp, num_comp, avg_xmom, avg_ymom, avg_zmom,
-                                       cur_cons, cur_prim, cell_rhs,
-                                       l_use_mono_adv, max_s_ptr, min_s_ptr,
-                                       detJ_arr, dxInv, mf_m,
+                                       new_cons, cur_prim, cell_rhs,
+                                       l_use_mono_adv, detJ_arr, dxInv, mf_m,
                                        horiz_adv_type, vert_adv_type,
                                        horiz_upw_frac, vert_upw_frac,
                                        flx_arr, domain, bc_ptr_h);
