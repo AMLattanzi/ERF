@@ -1,0 +1,201 @@
+From e21f9afd5b432e5222fbf907555900f4a5a716a7 Mon Sep 17 00:00:00 2001
+From: Aaron Lattanzi <amlattanzi@ghidorah.dhcp.lbl.gov>
+Date: Thu, 15 Aug 2024 14:33:36 -0700
+Subject: [PATCH] compiled in debug.
+
+---
+ Source/Advection/Advection.H                 |  1 +
+ Source/Advection/AdvectionSrcForState.cpp    | 44 ++++++++++++++------
+ Source/TimeIntegration/ERF_slow_rhs_post.cpp | 13 +++++-
+ Source/TimeIntegration/ERF_slow_rhs_pre.cpp  | 11 ++++-
+ 4 files changed, 54 insertions(+), 15 deletions(-)
+
+diff --git a/Source/Advection/Advection.H b/Source/Advection/Advection.H
+index 6228e7672..c425b2baa 100644
+--- a/Source/Advection/Advection.H
++++ b/Source/Advection/Advection.H
+@@ -49,6 +49,7 @@ void AdvectionSrcForScalars (const amrex::Real& dt,
+                              const AdvType horiz_adv_type, const AdvType vert_adv_type,
+                              const amrex::Real horiz_upw_frac, const amrex::Real vert_upw_frac,
+                              const amrex::GpuArray<const amrex::Array4<amrex::Real>, AMREX_SPACEDIM>& flx_arr,
++                             const amrex::GpuArray<      amrex::Array4<amrex::Real>, AMREX_SPACEDIM>& flx_tmp_arr,
+                              const amrex::Box& domain,
+                              const amrex::BCRec* bc_ptr_h);
+ 
+diff --git a/Source/Advection/AdvectionSrcForState.cpp b/Source/Advection/AdvectionSrcForState.cpp
+index 02248d631..3a37a9084 100644
+--- a/Source/Advection/AdvectionSrcForState.cpp
++++ b/Source/Advection/AdvectionSrcForState.cpp
+@@ -137,6 +137,7 @@ AdvectionSrcForScalars (const Real& dt,
+                         const Real horiz_upw_frac,
+                         const Real vert_upw_frac,
+                         const GpuArray<const Array4<Real>, AMREX_SPACEDIM>& flx_arr,
++                        const GpuArray<      Array4<Real>, AMREX_SPACEDIM>& flx_tmp_arr,
+                         const Box& domain,
+                         const BCRec* bc_ptr_h)
+ {
+@@ -256,6 +257,16 @@ AdvectionSrcForScalars (const Real& dt,
+ 
+     // Monotonicity preserving order reduction for SLOW SCALARS (0-th upwind)
+     if (use_mono_adv) {
++        // Copy flux data to flx_arr to avoid race condition on GPU
++        ParallelFor(bx, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
++        {
++            const int cons_index = icomp + n;
++            (flx_tmp_arr[0])(i,j,k,cons_index) = (flx_arr[0])(i,j,k,cons_index);
++            (flx_tmp_arr[1])(i,j,k,cons_index) = (flx_arr[1])(i,j,k,cons_index);
++            (flx_tmp_arr[2])(i,j,k,cons_index) = (flx_arr[2])(i,j,k,cons_index);
++        });
++
++        // Mono limiting
+         ParallelFor(bx, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
+         {
+             const int cons_index = icomp + n;
+@@ -281,39 +292,48 @@ AdvectionSrcForScalars (const Real& dt,
+             if (tmp_upd<min_val || tmp_upd>max_val) {
+                 // HI
+                 if (avg_xmom(i+1,j,k)>0.0) {
+-                    (flx_arr[0])(i+1,j,k,cons_index) = avg_xmom(i+1,j,k) * cell_prim(i  ,j,k,prim_index);
++                    (flx_tmp_arr[0])(i+1,j,k,cons_index) = avg_xmom(i+1,j,k) * cell_prim(i  ,j,k,prim_index);
+                 } else {
+-                    (flx_arr[0])(i+1,j,k,cons_index) = avg_xmom(i+1,j,k) * cell_prim(i+1,j,k,prim_index);
++                    (flx_tmp_arr[0])(i+1,j,k,cons_index) = avg_xmom(i+1,j,k) * cell_prim(i+1,j,k,prim_index);
+                 }
+                 if (avg_ymom(i,j+1,k)>0.0) {
+-                    (flx_arr[1])(i,j+1,k,cons_index) = avg_ymom(i,j+1,k) * cell_prim(i,j  ,k,prim_index);
++                    (flx_tmp_arr[1])(i,j+1,k,cons_index) = avg_ymom(i,j+1,k) * cell_prim(i,j  ,k,prim_index);
+                 } else {
+-                    (flx_arr[1])(i,j+1,k,cons_index) = avg_ymom(i,j+1,k) * cell_prim(i,j+1,k,prim_index);
++                    (flx_tmp_arr[1])(i,j+1,k,cons_index) = avg_ymom(i,j+1,k) * cell_prim(i,j+1,k,prim_index);
+                 }
+                 if (avg_zmom(i,j,k+1)>0.0) {
+-                    (flx_arr[2])(i,j,k+1,cons_index) = avg_zmom(i,j,k+1) * cell_prim(i,j,k  ,prim_index);
++                    (flx_tmp_arr[2])(i,j,k+1,cons_index) = avg_zmom(i,j,k+1) * cell_prim(i,j,k  ,prim_index);
+                 } else {
+-                    (flx_arr[2])(i,j,k+1,cons_index) = avg_zmom(i,j,k+1) * cell_prim(i,j,k+1,prim_index);
++                    (flx_tmp_arr[2])(i,j,k+1,cons_index) = avg_zmom(i,j,k+1) * cell_prim(i,j,k+1,prim_index);
+                 }
+ 
+                 // LO
+                 if (avg_xmom(i,j,k)>0.0) {
+-                    (flx_arr[0])(i,j,k,cons_index) = avg_xmom(i,j,k) * cell_prim(i-1,j,k,prim_index);
++                    (flx_tmp_arr[0])(i,j,k,cons_index) = avg_xmom(i,j,k) * cell_prim(i-1,j,k,prim_index);
+                 } else {
+-                    (flx_arr[0])(i,j,k,cons_index) = avg_xmom(i,j,k) * cell_prim(i  ,j,k,prim_index);
++                    (flx_tmp_arr[0])(i,j,k,cons_index) = avg_xmom(i,j,k) * cell_prim(i  ,j,k,prim_index);
+                 }
+                 if (avg_ymom(i,j,k)>0.0) {
+-                    (flx_arr[1])(i,j,k,cons_index) = avg_ymom(i,j,k) * cell_prim(i,j-1,k,prim_index);
++                    (flx_tmp_arr[1])(i,j,k,cons_index) = avg_ymom(i,j,k) * cell_prim(i,j-1,k,prim_index);
+                 } else {
+-                    (flx_arr[1])(i,j,k,cons_index) = avg_ymom(i,j,k) * cell_prim(i,j  ,k,prim_index);
++                    (flx_tmp_arr[1])(i,j,k,cons_index) = avg_ymom(i,j,k) * cell_prim(i,j  ,k,prim_index);
+                 }
+                 if (avg_zmom(i,j,k)>0.0) {
+-                    (flx_arr[2])(i,j,k,cons_index) = avg_zmom(i,j,k) * cell_prim(i,j,k-1,prim_index);
++                    (flx_tmp_arr[2])(i,j,k,cons_index) = avg_zmom(i,j,k) * cell_prim(i,j,k-1,prim_index);
+                 } else {
+-                    (flx_arr[2])(i,j,k,cons_index) = avg_zmom(i,j,k) * cell_prim(i,j,k  ,prim_index);
++                    (flx_tmp_arr[2])(i,j,k,cons_index) = avg_zmom(i,j,k) * cell_prim(i,j,k  ,prim_index);
+                 }
+             }
+         });
++
++        // Copy back to flx_arr to avoid race condition on GPU
++        ParallelFor(bx, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
++        {
++            const int cons_index = icomp + n;
++            (flx_arr[0])(i,j,k,cons_index) = (flx_tmp_arr[0])(i,j,k,cons_index);
++            (flx_arr[1])(i,j,k,cons_index) = (flx_tmp_arr[1])(i,j,k,cons_index);
++            (flx_arr[2])(i,j,k,cons_index) = (flx_tmp_arr[2])(i,j,k,cons_index);
++        });
+     }
+ 
+     ParallelFor(bx, ncomp, [=] AMREX_GPU_DEVICE (int i, int j, int k, int n) noexcept
+diff --git a/Source/TimeIntegration/ERF_slow_rhs_post.cpp b/Source/TimeIntegration/ERF_slow_rhs_post.cpp
+index 39e4912e9..8219ae701 100644
+--- a/Source/TimeIntegration/ERF_slow_rhs_post.cpp
++++ b/Source/TimeIntegration/ERF_slow_rhs_post.cpp
+@@ -201,7 +201,7 @@ void erf_slow_rhs_post (int level, int finest_level,
+     //    that we can fill the eddy viscosity in the ghost regions and
+     //    not have to call a boundary filler on this data itself
+     //
+-    // LES - updates both horizontal and vertical eddy viscosity components
++    // LES - updates both horizontal and vertical eddy viscosityS_tmp components
+     // PBL - only updates vertical eddy viscosity components so horizontal
+     //       components come from the LES model or are left as zero.
+     // *************************************************************************
+@@ -214,6 +214,7 @@ void erf_slow_rhs_post (int level, int finest_level,
+ #endif
+     {
+       std::array<FArrayBox,AMREX_SPACEDIM> flux;
++      std::array<FArrayBox,AMREX_SPACEDIM> flux_tmp;
+ 
+       int start_comp;
+       int   num_comp;
+@@ -228,9 +229,17 @@ void erf_slow_rhs_post (int level, int finest_level,
+         for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+             flux[dir].resize(surroundingNodes(tbx,dir),nvars);
+             flux[dir].setVal<RunOn::Device>(0.);
++            if (l_use_mono_adv) {
++                flux_tmp[dir].resize(surroundingNodes(tbx,dir),nvars);
++                flux_tmp[dir].setVal<RunOn::Device>(0.);
++            }
+         }
+         const GpuArray<const Array4<Real>, AMREX_SPACEDIM>
+             flx_arr{{AMREX_D_DECL(flux[0].array(), flux[1].array(), flux[2].array())}};
++        Array4<Real> tmpx = (l_use_mono_adv) ? flux_tmp[0].array() : Array4<Real>{};
++        Array4<Real> tmpy = (l_use_mono_adv) ? flux_tmp[1].array() : Array4<Real>{};
++        Array4<Real> tmpz = (l_use_mono_adv) ? flux_tmp[2].array() : Array4<Real>{};
++        const GpuArray<Array4<Real>, AMREX_SPACEDIM> flx_tmp_arr{{AMREX_D_DECL(tmpx,tmpy,tmpz)}};
+ 
+         // *************************************************************************
+         // Define Array4's
+@@ -381,7 +390,7 @@ void erf_slow_rhs_post (int level, int finest_level,
+                                        detJ_arr, dxInv, mf_m,
+                                        horiz_adv_type, vert_adv_type,
+                                        horiz_upw_frac, vert_upw_frac,
+-                                       flx_arr, domain, bc_ptr_h);
++                                       flx_arr, flx_tmp_arr, domain, bc_ptr_h);
+ 
+                 if (l_use_diff) {
+ 
+diff --git a/Source/TimeIntegration/ERF_slow_rhs_pre.cpp b/Source/TimeIntegration/ERF_slow_rhs_pre.cpp
+index 54889c805..055dcf175 100644
+--- a/Source/TimeIntegration/ERF_slow_rhs_pre.cpp
++++ b/Source/TimeIntegration/ERF_slow_rhs_pre.cpp
+@@ -237,6 +237,7 @@ void erf_slow_rhs_pre (int level, int finest_level,
+ #endif
+     {
+     std::array<FArrayBox,AMREX_SPACEDIM> flux;
++    std::array<FArrayBox,AMREX_SPACEDIM> flux_tmp;
+ 
+     for ( MFIter mfi(S_data[IntVars::cons],TileNoZ()); mfi.isValid(); ++mfi)
+     {
+@@ -312,9 +313,17 @@ void erf_slow_rhs_pre (int level, int finest_level,
+         for (int dir = 0; dir < AMREX_SPACEDIM; ++dir) {
+             flux[dir].resize(surroundingNodes(bx,dir),2);
+             flux[dir].setVal<RunOn::Device>(0.);
++            if (l_use_mono_adv) {
++                flux_tmp[dir].resize(surroundingNodes(bx,dir),2);
++                flux_tmp[dir].setVal<RunOn::Device>(0.);
++            }
+         }
+         const GpuArray<const Array4<Real>, AMREX_SPACEDIM>
+             flx_arr{{AMREX_D_DECL(flux[0].array(), flux[1].array(), flux[2].array())}};
++        Array4<Real> tmpx = (l_use_mono_adv) ? flux_tmp[0].array() : Array4<Real>{};
++        Array4<Real> tmpy = (l_use_mono_adv) ? flux_tmp[1].array() : Array4<Real>{};
++        Array4<Real> tmpz = (l_use_mono_adv) ? flux_tmp[2].array() : Array4<Real>{};
++        const GpuArray<Array4<Real>, AMREX_SPACEDIM> flx_tmp_arr{{AMREX_D_DECL(tmpx,tmpy,tmpz)}};
+ 
+         // *****************************************************************************
+         // Perturbational pressure field
+@@ -456,7 +465,7 @@ if (cell_data(i,j,k,RhoTheta_comp) < 0.) printf("BAD THETA AT %d %d %d %e %e \n"
+                                detJ_arr, dxInv, mf_m,
+                                l_horiz_adv_type, l_vert_adv_type,
+                                l_horiz_upw_frac, l_vert_upw_frac,
+-                               flx_arr, domain, bc_ptr_h);
++                               flx_arr, flx_tmp_arr, domain, bc_ptr_h);
+ 
+         if (l_use_diff) {
+             Array4<Real> diffflux_x = dflux_x->array(mfi);
