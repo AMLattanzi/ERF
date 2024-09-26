@@ -1,6 +1,8 @@
 #ifndef ERF_HSEUTIL_H_
 #define ERF_HSEUTIL_H_
 
+#include <ERF_Constants.H>
+
 /**
  * Utility functions for calculating a hydrostatic equilibrium (HSE) base state
 */

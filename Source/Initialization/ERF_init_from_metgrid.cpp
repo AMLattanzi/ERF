@@ -1,7 +1,7 @@
 /**
  * \file ERF_init_from_metgrid.cpp
  */
-
+#include <ERF_Constants.H>
 #include <ERF_Metgrid_utils.H>
 
 using namespace amrex;
@@ -847,6 +847,9 @@ init_base_state_from_metgrid (const bool use_moisture,
     Arena_Used = The_Pinned_Arena();
 #endif
 
+    // Copy to access on GPU
+    Real grav = CONST_GRAV;
+
     { // set pressure and density at initialization.
         const Array4<Real>& r_hse_arr  = r_hse_fab.array();
         const Array4<Real>& p_hse_arr  = p_hse_fab.array();
@@ -863,7 +866,7 @@ init_base_state_from_metgrid (const bool use_moisture,
         auto const new_z     = z_phys_cc_fab.const_array();
 
         const int maxiter = 10;
-        const amrex::Real tol = 1.0e-12;
+        const Real tol = 1.0e-12;
         ParallelFor(valid_bx2d, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
         {
             for (int k=0; k<=kmax; k++) {
@@ -874,22 +877,22 @@ init_base_state_from_metgrid (const bool use_moisture,
             z_vec[kmax+1] =  new_z(i,j,kmax+1);
 
             // Get Psurf
-            amrex::Real Psurf;
+            Real Psurf;
             if (flag_psfc_vec[0] == 1) {
                 Psurf = orig_psfc(i,j,0);
             } else {
-                amrex::Real t_0 = 290.0; // WRF's model_config_rec%base_temp
-                amrex::Real a   = 50.0; // WRF's model_config_rec%base_lapse
-                Psurf = p_0*exp(-t_0/a+std::pow((std::pow(t_0/a, 2)-2.0*CONST_GRAV*z_vec[0]/(a*R_d)), 0.5));
+                Real t_0 = 290.0; // WRF's model_config_rec%base_temp
+                Real a   = 50.0; // WRF's model_config_rec%base_lapse
+                Psurf = p_0*exp(-t_0/a+std::pow((std::pow(t_0/a, 2)-2.0*grav*z_vec[0]/(a*R_d)), 0.5));
             }
 
             // Iterations for the first CC point that is 1/2 dz off the surface
             {
-                amrex::Real half_dz = z_vec[0];
-                amrex::Real qvf = 1.0+(R_v/R_d)*Q_vec[0];
+                Real half_dz = z_vec[0];
+                Real qvf = 1.0+(R_v/R_d)*Q_vec[0];
                 Thetam_vec[0] = Thetad_vec[0]*qvf;
                 for (int iter=0; iter<maxiter; iter++) {
-                    Pm_vec[0] = Psurf-half_dz*(Rhom_vec[0])*(1.0+Q_vec[0])*CONST_GRAV;
+                    Pm_vec[0] = Psurf-half_dz*(Rhom_vec[0])*(1.0+Q_vec[0])*grav;
                     if (Pm_vec[0] < 0.0) Pm_vec[0] = 0.0;
                     Rhom_vec[0] = (p_0/(R_d*Thetam_vec[0]))*std::pow(Pm_vec[0]/p_0, iGamma);
                 } // it
@@ -899,15 +902,15 @@ init_base_state_from_metgrid (const bool use_moisture,
             for (int k=1; k<=kmax; k++) {
 
                 // Assignment only for downward integration in following loop
-                amrex::Real qvf = 1.0+(R_v/R_d)*Q_vec[k];
+                Real qvf = 1.0+(R_v/R_d)*Q_vec[k];
                 Thetam_vec[k]   = Thetad_vec[k]*qvf;
 
                 // Vertical grid spacing
-                amrex::Real dz = z_vec[k]-z_vec[k-1];
+                Real dz = z_vec[k]-z_vec[k-1];
 
                 // Establish known constant
-                amrex::Real rho_tot_lo = Rhom_vec[k-1] * (1. + Q_vec[k-1]);
-                amrex::Real C = -Pm_vec[k-1] + 0.5*rho_tot_lo*CONST_GRAV*dz;
+                Real rho_tot_lo = Rhom_vec[k-1] * (1. + Q_vec[k-1]);
+                Real C = -Pm_vec[k-1] + 0.5*rho_tot_lo*grav*dz;
 
                 // Initial guess and residual
                 Pm_vec[k]   = Pm_vec[k-1];
@@ -915,12 +918,12 @@ init_base_state_from_metgrid (const bool use_moisture,
                                                     Pm_vec[k],
                                                     R_d/Cp_d,
                                                     Q_vec[k]);
-                amrex::Real rho_tot_hi = Rhom_vec[k] * (1. + Q_vec[k]);
-                amrex::Real F = Pm_vec[k] + 0.5*rho_tot_hi*CONST_GRAV*dz + C;
+                Real rho_tot_hi = Rhom_vec[k] * (1. + Q_vec[k]);
+                Real F = Pm_vec[k] + 0.5*rho_tot_hi*grav*dz + C;
 
                 // Do iterations
                 if (std::abs(F)>tol) HSEutils::Newton_Raphson_hse(tol, R_d/Cp_d, dz,
-                                                                  CONST_GRAV, C, Thetad_vec[k],
+                                                                  grav, C, Thetad_vec[k],
                                                                   Q_vec[k], Q_vec[k],
                                                                   Pm_vec[k], Rhom_vec[k], F);
             } // k
@@ -929,10 +932,10 @@ init_base_state_from_metgrid (const bool use_moisture,
               Pd_vec[kmax] = Pm_vec[kmax];
             Rhod_vec[kmax] = (p_0/(R_d*Thetam_vec[kmax]))*std::pow(Pd_vec[kmax]/p_0, iGamma);
             for (int k=kmax-1; k>=0; k--) {
-                amrex::Real dz = z_vec[k+1]-z_vec[k];
+                Real dz = z_vec[k+1]-z_vec[k];
                 Rhod_vec[k] = Rhod_vec[k+1]; // an initial guess.
                 for (int iter=0; iter<maxiter; iter++) {
-                    Pd_vec[k] = Pd_vec[k+1]+0.5*dz*(Rhod_vec[k]+Rhod_vec[k+1])*CONST_GRAV;
+                    Pd_vec[k] = Pd_vec[k+1]+0.5*dz*(Rhod_vec[k]+Rhod_vec[k+1])*grav;
                     if (Pd_vec[k] < 0.0) Pd_vec[k] = 0.0;
                     Rhod_vec[k] = (p_0/(R_d*Thetam_vec[k]))*std::pow(Pd_vec[k]/p_0, iGamma);
                 } // it
@@ -1030,7 +1033,7 @@ init_base_state_from_metgrid (const bool use_moisture,
         auto       p_hse_arr = p_hse_bcs_fab.array();
 
         const int maxiter = 10;
-        const amrex::Real tol = 1.0e-12;
+        const Real tol = 1.0e-12;
         ParallelFor(valid_bx2d, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
         {
             for (int k=0; k<=kmax; k++) {
@@ -1041,22 +1044,22 @@ init_base_state_from_metgrid (const bool use_moisture,
             z_vec[kmax+1] = new_z(i,j,kmax+1);
 
             // Get Psurf
-            amrex::Real Psurf;
+            Real Psurf;
             if (flag_psfc_vec[it] == 1) {
                 Psurf = orig_psfc(i,j,0);
             } else {
-                amrex::Real t_0 = 290.0; // WRF's model_config_rec%base_temp
-                amrex::Real a   = 50.0; // WRF's model_config_rec%base_lapse
-                Psurf = p_0*exp(-t_0/a+std::pow((std::pow(t_0/a, 2)-2.0*CONST_GRAV*z_vec[0]/(a*R_d)), 0.5));
+                Real t_0 = 290.0; // WRF's model_config_rec%base_temp
+                Real a   = 50.0; // WRF's model_config_rec%base_lapse
+                Psurf = p_0*exp(-t_0/a+std::pow((std::pow(t_0/a, 2)-2.0*grav*z_vec[0]/(a*R_d)), 0.5));
             }
 
             // Iterations for the first CC point that is 1/2 dz off the surface
             {
-                amrex::Real half_dz = z_vec[0];
-                amrex::Real qvf = 1.0+(R_v/R_d)*Q_vec[0];
+                Real half_dz = z_vec[0];
+                Real qvf = 1.0+(R_v/R_d)*Q_vec[0];
                 Thetam_vec[0] = Thetad_vec[0]*qvf;
                 for (int iter=0; iter<maxiter; iter++) {
-                    Pm_vec[0] = Psurf-half_dz*(Rhom_vec[0])*(1.0+Q_vec[0])*CONST_GRAV;
+                    Pm_vec[0] = Psurf-half_dz*(Rhom_vec[0])*(1.0+Q_vec[0])*grav;
                     if (Pm_vec[0] < 0.0) Pm_vec[0] = 0.0;
                     Rhom_vec[0] = (p_0/(R_d*Thetam_vec[0]))*std::pow(Pm_vec[0]/p_0, iGamma);
                 } // it
@@ -1066,15 +1069,15 @@ init_base_state_from_metgrid (const bool use_moisture,
             for (int k=1; k<=kmax; k++) {
 
                 // Assignment only for downward integration in following loop
-                amrex::Real qvf = 1.0+(R_v/R_d)*Q_vec[k];
+                Real qvf = 1.0+(R_v/R_d)*Q_vec[k];
                 Thetam_vec[k]   = Thetad_vec[k]*qvf;
 
                 // Vertical grid spacing
-                amrex::Real dz = z_vec[k]-z_vec[k-1];
+                Real dz = z_vec[k]-z_vec[k-1];
 
                 // Establish known constant
-                amrex::Real rho_tot_lo = Rhom_vec[k-1] * (1. + Q_vec[k-1]);
-                amrex::Real C = -Pm_vec[k-1] + 0.5*rho_tot_lo*CONST_GRAV*dz;
+                Real rho_tot_lo = Rhom_vec[k-1] * (1. + Q_vec[k-1]);
+                Real C = -Pm_vec[k-1] + 0.5*rho_tot_lo*grav*dz;
 
                 // Initial guess and residual
                 Pm_vec[k]   = Pm_vec[k-1];
@@ -1082,12 +1085,12 @@ init_base_state_from_metgrid (const bool use_moisture,
                                                     Pm_vec[k],
                                                     R_d/Cp_d,
                                                     Q_vec[k]);
-                amrex::Real rho_tot_hi = Rhom_vec[k] * (1. + Q_vec[k]);
-                amrex::Real F = Pm_vec[k] + 0.5*rho_tot_hi*CONST_GRAV*dz + C;
+                Real rho_tot_hi = Rhom_vec[k] * (1. + Q_vec[k]);
+                Real F = Pm_vec[k] + 0.5*rho_tot_hi*grav*dz + C;
 
                 // Do iterations
                 if (std::abs(F)>tol) HSEutils::Newton_Raphson_hse(tol, R_d/Cp_d, dz,
-                                                                  CONST_GRAV, C, Thetad_vec[k],
+                                                                  grav, C, Thetad_vec[k],
                                                                   Q_vec[k], Q_vec[k],
                                                                   Pm_vec[k], Rhom_vec[k], F);
             } // k
@@ -1096,10 +1099,10 @@ init_base_state_from_metgrid (const bool use_moisture,
               Pd_vec[kmax] = Pm_vec[kmax];
             Rhod_vec[kmax] = (p_0/(R_d*Thetam_vec[kmax]))*std::pow(Pd_vec[kmax]/p_0, iGamma);
             for (int k=kmax-1; k>=0; k--) {
-                amrex::Real dz = z_vec[k+1]-z_vec[k];
+                Real dz = z_vec[k+1]-z_vec[k];
                 Rhod_vec[k] = Rhod_vec[k+1]; // an initial guess.
                 for (int iter=0; iter<maxiter; iter++) {
-                    Pd_vec[k] = Pd_vec[k+1]+0.5*dz*(Rhod_vec[k]+Rhod_vec[k+1])*CONST_GRAV;
+                    Pd_vec[k] = Pd_vec[k+1]+0.5*dz*(Rhod_vec[k]+Rhod_vec[k+1])*grav;
                     if (Pd_vec[k] < 0.0) Pd_vec[k] = 0.0;
                     Rhod_vec[k] = (p_0/(R_d*Thetam_vec[k]))*std::pow(Pd_vec[k]/p_0, iGamma);
                 } // it
