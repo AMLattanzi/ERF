@@ -24,6 +24,89 @@ void SatAdj::AdvanceSatAdj (const SolverChoice& /*solverChoice*/)
         auto theta_array = mic_fab_vars[MicVar_SatAdj::theta]->array(mfi);
         auto pres_array  = mic_fab_vars[MicVar_SatAdj::pres]->array(mfi);
 
+#if 1
+        // BEGIN ML SAT MODEL
+        //=============================================================
+
+        // set pytorch data type (default is float or torch::kFloat32)
+        auto dtype0 = torch::kFloat64;
+
+        // Tensor options for host only
+        auto tensoropt = torch::TensorOptions().dtype(dtype0);
+
+        // Auxiliary array for pytorch
+        const long unsigned int nin  = 4; // T, P, Qv, Qc
+        const long unsigned int nout = 3; // dT, dQv, dQc
+        int ncell = tbx.numPts();
+        Gpu::ManagedVector<Real> ML_aux(ncell*nin);
+        Real* AMREX_RESTRICT ML_auxPtr = ML_aux.dataPtr();
+
+        // Box attributes for index flattening
+        const IntVect tbx_lo = tbx.smallEnd();
+        const IntVect ntbox  = tbx.size();
+
+        // Vector of inputs
+        Vector<Array4<Real>> vec_ml_in = {tabs_array, pres_array,
+                                            qv_array,   qc_array};
+
+        // Copy the ML inputs into auxiliary array
+        for (int n(0); n<nin; ++n) {
+            Array4<Real> data_arr = vec_ml_in[n];
+            ParallelFor(tbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+            {
+                // Flatten indexing
+                int ii = i - tbx_lo[0];
+                int jj = j - tbx_lo[1];
+                int index = jj*ntbox[0] + ii;
+                int kk = k - tbx_lo[2];
+                index += kk*ntbox[0]*ntbox[1];
+
+                // NOTE: No scaling is done here yet!
+
+                // array order is row-based [index][comp]
+                ML_auxPtr[index*nin + n] = data_arr(i,j,k);
+            });
+        } // n
+
+        // Create torch tensor from array
+        at::Tensor inputs_torch = torch::from_blob(ML_auxPtr, {ncell, nin}, tensoropt);
+
+        // Evaluate torch model
+        at::Tensor outputs_torch = SatAdj_ML.forward({inputs_torch}).toTensor();
+        outputs_torch = outputs_torch.to(dtype0);
+
+        // Get accessor to output tensor (read-only, 2D {flatten ijk & nvar})
+        auto outputs_torch_acc = outputs_torch.accessor<Real,2>();
+
+        // Use output to modify dycore variables
+        ParallelFor(tbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
+        {
+            // Flatten indexing
+            int ii = i - tbx_lo[0];
+            int jj = j - tbx_lo[1];
+            int index = jj*ntbox[0] + ii;
+            int kk = k - tbx_lo[2];
+            index += kk*ntbox[0]*ntbox[1];
+
+            // Conserve total moisture
+            Real Qt = qv_array(i,j,k) + qc_array(i,j,k);
+
+            // NOTE: No unscaling is done yet!
+
+            // ML output is {dT, dQv, dQc}
+            Real dT  = static_cast<Real>(outputs_torch_acc[index][0]);
+            Real dQv = static_cast<Real>(outputs_torch_acc[index][1]);
+            tabs_array(i,j,k) += dT;
+              qv_array(i,j,k) += dQv;
+              qc_array(i,j,k) -= dQv;
+           theta_array(i,j,k)  = getThgivenPandT(tabs_array(i,j,k), 100.0*pres_array(i,j,k), rdOcp);
+
+            // Clip
+            qv_array(i,j,k) = std::max(0.0, qv_array(i,j,k));
+            qc_array(i,j,k) = std::max(0.0, qc_array(i,j,k));
+
+        });
+#else
         ParallelFor(tbx, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
         {
             //qc_array(i,j,k) = std::max(0.0, qc_array(i,j,k));
@@ -107,6 +190,8 @@ void SatAdj::AdvanceSatAdj (const SolverChoice& /*solverChoice*/)
 
                 }
             }
+
         });
-    }
+#endif
+    } // mfi
 }

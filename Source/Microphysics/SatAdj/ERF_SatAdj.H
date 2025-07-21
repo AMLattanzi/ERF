@@ -11,6 +11,9 @@
 #include <vector>
 #include <memory>
 
+// ML model
+#include <torch/script.h>
+
 #include <AMReX_FArrayBox.H>
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFabUtil.H>
@@ -207,5 +210,9 @@ private:
 
     // independent variables
     amrex::Array<FabPtr, MicVar_SatAdj::NumVars> mic_fab_vars;
+
+    // ML model
+    std::string model_filename = "my_filename.pt";
+    torch::jit::script::Module SatAdj_ML;
 };
 #endif

@@ -30,6 +30,9 @@ void SatAdj::Init (const MultiFab& cons_in,
                                                         1, cons_in.nGrowVect());
         mic_fab_vars[ivar]->setVal(0.);
     }
+
+    // Initialize the ML model once
+    SatAdj_ML = torch::jit::load(model_filename);
 }
 
 /**
