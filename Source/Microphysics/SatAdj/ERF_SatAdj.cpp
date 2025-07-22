@@ -99,7 +99,7 @@ void SatAdj::AdvanceSatAdj (const SolverChoice& /*solverChoice*/)
             tabs_array(i,j,k) += dT;
               qv_array(i,j,k) += dQv;
               qc_array(i,j,k) -= dQv;
-           theta_array(i,j,k)  = getThgivenPandT(tabs_array(i,j,k), 100.0*pres_array(i,j,k), rdOcp);
+           theta_array(i,j,k)  = getThgivenPandT(tabs_array(i,j,k), pres_array(i,j,k), rdOcp);
 
             // Clip
             qv_array(i,j,k) = std::max(0.0, qv_array(i,j,k));
