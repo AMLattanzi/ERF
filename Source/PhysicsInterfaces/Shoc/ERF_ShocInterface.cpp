@@ -95,6 +95,7 @@ ERF::compute_shoc_tendencies (int lev,
                               MultiFab* z_phys_nd,
                               const Real& dt_advance)
 {
+    /*
     Print() << "Advancing SHOC at level: " << lev << " ...";
 
     shoc_interface[lev]->set_grids(lev, cons->boxArray(), Geom(lev),
@@ -107,6 +108,28 @@ ERF::compute_shoc_tendencies (int lev,
     shoc_interface[lev]->finalize_impl(dt_advance);
 
     Print() << "Done advancing SHOC\n";
+    */
+
+    // Set up the way we normally would
+    shoc_interface[lev]->set_grids(lev, cons->boxArray(), Geom(lev),
+                                       cons , xvel , yvel, zvel, w_subsid,
+                                       tau13, tau23, hfx3, qfx3,
+                                       eddyDiffs, z_phys_nd);
+
+    shoc_interface[lev]->initialize_impl();
+
+    // Now overwrite the data with ShocData class
+    shoc_interface[lev]->shocdata_to_kokkos_buffers();
+
+    // Run Shoc with its outputs as inputs
+    for (int itime(0); itime<100; ++itime) {
+        Print() << "Advancing SHOC at iteration: " << itime << " ...";
+        shoc_interface[lev]->run_impl(dt_advance);
+        Print() << "Done advancing SHOC\n";
+    }
+
+    // Finalize and deallocate
+    shoc_interface[lev]->finalize_impl(dt_advance);
 }
 
 
@@ -337,6 +360,104 @@ SHOCInterface::dealloc_buffers ()
 
 
 void
+SHOCInterface::shocdata_to_kokkos_buffers ()
+{
+    m_shoc.init_from_ascii();
+
+    //
+    // Expose for device capture
+    //
+
+    // Interface data structures
+    //=======================================================
+    auto omega_d = omega;
+    auto surf_sens_flux_d = surf_sens_flux;
+    auto surf_mom_flux_d = surf_mom_flux;
+    auto surf_evap_d = surf_evap;
+    auto T_mid_d = T_mid;
+    auto qv_d = qv;
+    auto surf_drag_coeff_tms_d = surf_drag_coeff_tms;
+
+    // Input data structures
+    //=======================================================
+    auto p_mid_d = p_mid;
+    auto p_int_d = p_int;
+    auto pseudo_dens_d = pseudo_dens;
+    auto phis_d = phis;
+
+    // Input/Output data structures
+    //=======================================================
+    auto horiz_wind_d = horiz_wind;
+    auto cldfrac_liq_d = cldfrac_liq;
+    auto tke_d = tke;
+    auto qc_d = qc;
+
+    // Enforce the correct grid heights and density
+    //=======================================================
+    auto dz_d = m_buffer.dz;
+
+    int  nlay  = m_num_layers;
+    for (MFIter mfi(*m_cons); mfi.isValid(); ++mfi) {
+        const auto& vbx  = mfi.validbox();
+        const int nx     = vbx.length(0);
+        const int imin   = vbx.smallEnd(0);
+        const int jmin   = vbx.smallEnd(1);
+        const int kmax   = vbx.bigEnd(2);
+        const int offset = m_col_offsets[mfi.index()];
+
+        ParallelFor(vbx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            // NOTE: k gets permuted with ilay
+            // map [i,j,k] 0-based to [icol, ilay] 0-based
+            const int icol   = (j-jmin)*nx + (i-imin) + offset;
+            const int ilay   = kmax - k;
+
+            // Input/Output data structures
+            //=======================================================
+            horiz_wind_d(icol,0,ilay)  = m_shoc.u[k];
+            horiz_wind_d(icol,1,ilay)  = m_shoc.v[k];
+            cldfrac_liq_d(icol,ilay)   = m_shoc.cldfrac_l;
+            tke_d(icol,ilay)           = m_shoc.tke[k];
+            qc_d(icol,ilay)            = m_shoc.qc[k];
+
+            // Interface data structures
+            //=======================================================
+            // eamxx_common_physics_functions_impl.hpp: calculate_vertical_velocity
+            omega_d(icol,ilay)           = m_shoc.omega;
+            if (k==0) {
+                surf_mom_flux_d(icol,0)  = m_shoc.t13_s;
+                surf_mom_flux_d(icol,1)  = m_shoc.t23_s;
+                // No unit conversion to W/m^2 (ERF_ShocInterface.H L224)
+                surf_sens_flux_d(icol)   = m_shoc.hfx_s;
+                surf_evap_d(icol)        = m_shoc.qfx_s;
+                // Back out the drag coeff
+                surf_drag_coeff_tms_d(icol) = m_shoc.drag_coeff_s;
+            }
+            T_mid_d(icol,ilay)          = m_shoc.tmid[k];
+            qv_d(icol,ilay)             = m_shoc.qv[k];
+
+            // Input data structures
+            //=======================================================
+            p_mid_d(icol,ilay)       = m_shoc.p[k];
+            p_int_d(icol,ilay)       = m_shoc.pint[k];
+            // eamxx_common_physics_functions_impl.hpp: calculate_density
+            pseudo_dens_d(icol,ilay) = m_shoc.pint[k] - m_shoc.pint[k+1];
+            // Enforce the grid spacing
+            dz_d(icol,ilay) = m_shoc.dz;
+            // Surface geopotential
+            if (k==0) {
+                phis_d(icol) = CONST_GRAV * m_shoc.zsurf;
+            }
+
+            if (ilay==(nlay-1)) {
+                p_int_d(icol,ilay+1) = m_shoc.pint[k+1];
+            }
+        });
+    }
+}
+
+
+void
 SHOCInterface::mf_to_kokkos_buffers ()
 {
     //
@@ -503,6 +624,7 @@ SHOCInterface::kokkos_buffers_to_mf (const Real dt)
 
     // Interface data structures
     //=======================================================
+    auto p_mid_d = p_mid;
     auto T_mid_d = T_mid;
     auto qv_d = qv;
 
@@ -536,6 +658,22 @@ SHOCInterface::kokkos_buffers_to_mf (const Real dt)
         const Array4<Real>& c_tend_arr     = c_tend.array(mfi);
         const Array4<Real>& u_tend_arr     = u_tend.array(mfi);
         const Array4<Real>& v_tend_arr     = v_tend.array(mfi);
+
+        // Print the data
+        ParallelFor(vbx_cc, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            // NOTE: k gets permuted with ilay
+            // map [i,j,k] 0-based to [icol, ilay] 0-based
+            const int icol   = (j-jmin)*nx + (i-imin) + offset;
+            const int ilay   = kmax - k;
+
+            if (i==0 && j==0) {
+                Print() << " ilay u v tke qv qc T P " << "\n";
+                Print() << ilay << ' ' << horiz_wind_d(icol,0,ilay)[0] << ' ' << horiz_wind_d(icol,1,ilay)[0] << ' '
+                        << tke_d(icol,ilay)[0] << ' ' << qv_d(icol,ilay)[0] << ' ' << qc_d(icol,ilay)[0] << ' '
+                        << T_mid_d(icol,ilay)[0] << ' ' << p_mid_d(icol,ilay)[0] << "\n";
+            }
+        });
 
         ParallelFor(vbx_cc, vbx_x, vbx_y,
         [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept

@@ -32,6 +32,220 @@ using  Int=int;
 //#include "share/atm_process/atmosphere_process.hpp"
 //#include "share/atm_process/ATMBufferManager.hpp"
 
+// Forward declare the ShocData class
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <stdexcept>
+#include <functional>
+#include <cmath>
+class ShocData {
+public:
+    // Default constructor
+    ShocData () = default;
+
+    // Specified file constructor
+    ShocData (std::string fname) : filename(fname) {}
+
+    // Move constructor
+    ShocData (ShocData&& src) {
+        nx = src.nx;
+        ny = src.ny;
+        nz = src.nz;
+        dz = src.dz;
+
+        zsurf = src.zsurf;
+        cldfrac_l = src.cldfrac_l;
+
+        drag_coeff_s = src.drag_coeff_s;
+        qfx_s = src.qfx_s;
+        hfx_s = src.hfx_s;
+        t13_s = src.t13_s;
+        t23_s = src.t23_s;
+
+        u    = src.u;
+        v    = src.v;
+        tke  = src.tke;
+        qv   = src.qv;
+        qc   = src.qc;
+        tmid = src.tmid;
+        thd  = src.thd;
+        p    = src.p;
+    }
+
+    // Default destructor
+    ~ShocData () = default;
+
+    // HSE balance solution
+    void
+    init_hse_pressure_temp ()
+    {
+        // Constants
+        static constexpr double g     = 9.81;
+        static constexpr double P0    = 1.0e5;
+        static constexpr double Rd    = 287.0;
+        static constexpr double Rv    = 461.505;
+        static constexpr double gamma = 1.4;
+
+        // Derived quantities
+        double rvOrd = Rv/Rd;
+        double gmone = gamma - 1.;
+        double num   = - g * gmone;
+        double den   = gamma * P0 * pow(Rd/P0, gamma);
+
+        // EOS functions
+        std::function<double(double,double,double)> PgivenRandThandQv = [=] (double r, double th, double qv)
+            {
+                return ( P0 * pow(r*Rd*th*(1. + rvOrd*qv)/P0, gamma) );
+            };
+
+        std::function<double(double,double,double)> TgivenPandRandQv = [=] (double p, double r, double qv)
+            {
+                return ( p / (r*Rd*(1. + rvOrd*qv) ) );
+            };
+
+        // Populate T and P
+        pint[0]    = PgivenRandThandQv(rho_s,thd[0],qv[0]);
+        double z   = 0.5 * dz + zsurf;
+        double val = num * z / (den * pow(thd[0], gamma)) + pow(rho_s, gmone);
+        double rho = pow(val, 1./gmone);
+        p[0]       = PgivenRandThandQv(rho,thd[0],qv[0]);
+        tmid[0]    = TgivenPandRandQv(p[0],rho,qv[0]);
+        for (int k(1); k<nz; ++k) {
+            z   = (double) (k + 0.5) * dz + zsurf;
+            val = num * z / (den * pow(thd[k], gamma)) + pow(rho_s, gmone);
+            rho = pow(val, 1./gmone);
+            p[k]    = PgivenRandThandQv(rho,thd[k],qv[k]);
+            tmid[k] = TgivenPandRandQv(p[k],rho,qv[k]);
+            pint[k] = 0.5 * (p[k] + p[k-1]);
+        }
+        z   = (double) (nz + 0.5) * dz + zsurf;
+        val = num * z / (den * pow(thd[nz-1], gamma)) + pow(rho_s, gmone);
+        rho = pow(val, 1./gmone);
+        double pghost = PgivenRandThandQv(rho,thd[nz-1],qv[nz-1]);
+        pint[nz] = 0.5 * (p[nz-1] + pghost);
+    }
+
+    // Read the ascii file and populate relevant data
+    void
+    init_from_ascii () {
+        std::ifstream input_file(filename);
+        if (!input_file) {
+            throw std::runtime_error("Cannot open: " + filename);
+        }
+
+        // Parse the grid dimension header
+        bool is_comment{true};
+        std::string next_line;
+        while (is_comment) {
+            getline(input_file, next_line);
+            if (next_line[0] != '#') { is_comment = false; }
+        }
+        nx = stoi(next_line);
+        getline(input_file, next_line);
+        ny = stoi(next_line);
+        getline(input_file, next_line);
+        nz = stoi(next_line);
+
+        // Parse the rest of the file
+        int idx = 0;
+        double u_tmp   = 0.0;
+        double v_tmp   = 0.0;
+        double tke_tmp = 0.0;
+        double qv_tmp  = 0.0;
+        double qc_tmp  = 0.0;
+        double thd_tmp = 0.0;
+        std::vector<double*> data_ptr = {&dz    , &zsurf , &omega  ,
+                                    &qfx_s , &hfx_s , &t13_s  , &t23_s,
+                                    &u_tmp , &v_tmp , &tke_tmp,
+                                    &qv_tmp, &qc_tmp, &thd_tmp  };
+        while (input_file >> next_line) {
+            if (next_line[0] == '#') {
+                getline(input_file, next_line);
+                continue;
+            }
+            *(data_ptr[idx]) = stod(next_line);
+            ++idx;
+        }
+
+        // Initialize the cloud fraction
+        cldfrac_l = (qc_tmp > 0.) ? 1. : 0.;
+
+        // Initialize the drag coeff
+        // NOTE: tau_tot = -rho * Cd * wsp^2, multiply by u/wsp to get tau_13
+        drag_coeff_s = t13_s / (-rho_s * sqrt(u_tmp*u_tmp+v_tmp*v_tmp) * u_tmp);
+        if (drag_coeff_s < 0.) { throw std::runtime_error("Drag coeff must be positive!"); }
+
+        // Initialize the vector data
+        u.resize(nz, u_tmp);
+        v.resize(nz, v_tmp);
+        tke.resize(nz, tke_tmp);
+        qv.resize(nz, qv_tmp);
+        qc.resize(nz, qc_tmp);
+        thd.resize(nz, thd_tmp);
+        p.resize(nz, 0.);
+        pint.resize(nz+1, 0.);
+        tmid.resize(nz, 0.);
+
+        // Populate T and P with HSE solution for
+        // constant Thd/qv
+        init_hse_pressure_temp();
+    }
+
+    void
+    print_state ()
+    {
+        std::cout << "Grid dimensions (nx, ny, nz): (" << nx << ' ' << ny << ' ' << nz << ")" << "\n";
+        std::cout << "Bottom layer at z = " << zsurf << " with spacing dz = " << dz << "\n";
+        std::cout << "Omega      = " << omega << "\n";
+        std::cout << "Cld frac   = " << cldfrac_l << "\n";
+        std::cout << "Drag coeff = " << drag_coeff_s << "\n";
+        std::cout << "Kinematic latent surf flux   = " << qfx_s << "\n";
+        std::cout << "Kinematic sensible surf flux = " << hfx_s << "\n";
+        std::cout << "Kinematic (U,V) surf flux    = (" << t13_s << ' ' << t23_s << ")" << "\n";
+        std::cout << "\n";
+        std::cout << "( k, z, u, v, tke, qv, qc, thd, t, p, pint )" << "\n";
+        for (int k(0); k<nz; ++k) {
+            double z = (double) (k+0.5) * dz;
+            std::cout << "( " << k << "  " << z << "  " << u[k] << "  " << v[k] << "  "
+                 << tke[k] << "  " << qv[k] << "  " << qc[k] << "  " << thd[k] << "  "
+                 << tmid[k] << "  " << p[k] << "  " << pint[k] << " )" << "\n";
+
+        }
+    }
+
+    // Data members
+    //======================================
+    // File to open and work on
+    std::string filename = "./ShocInOut.txt";
+
+    // Grid dimensions
+    int nx, ny, nz;
+
+    // Vertical grid spacing
+    double dz;
+
+    // 1D data structure (surface height)
+    double zsurf;
+
+    // 1D data structure (cloud fraction liq)
+    double cldfrac_l;
+
+    // 1D data structure (omega)
+    double omega;
+
+    // 1D data structures (surface fluxes)
+    double drag_coeff_s;
+    double qfx_s, hfx_s, t13_s, t23_s;
+
+    // Column data that is homogeneous
+    std::vector<double> u, v, tke, qv, qc, thd, tmid, p, pint;
+
+    // Specified density at surface
+    static constexpr double rho_s = 1.0;
+};
+
+
 class SHOCInterface
 {
     using SHF          = scream::shoc::Functions<Real, KokkosDefaultDevice>;
@@ -108,6 +322,10 @@ public:
     void
     mf_to_kokkos_buffers ();
 
+    // Fill KOKKOS Views from ShocData
+    void
+    shocdata_to_kokkos_buffers ();
+
     // Fill AMReX MultiFabs from KOKKOS Views
     void
     kokkos_buffers_to_mf (const Real dt);
@@ -153,7 +371,7 @@ protected:
             const int i = team.league_rank();
 
             const Real zvir    = C::ZVIR;
-            //const Real cpair   = C::Cpair;
+            const Real cpair   = C::Cpair;
             const Real ggr     = C::gravit;
             const Real inv_ggr = 1/ggr;
             const Real mintke  = SC::mintke;
@@ -190,7 +408,7 @@ protected:
                 thv(i,k)  = theta_zt*(1 + zvir*qv(i,k) - qc(i,k));
 
                 // Vertical layer thickness
-                //dz(i,k) = PF::calculate_dz(pseudo_density(i,k), p_mid(i,k), T_mid(i,k), qv(i,k));
+                dz(i,k) = PF::calculate_dz(pseudo_density(i,k), p_mid(i,k), T_mid(i,k), qv(i,k));
 
                 rrho(i,k) = inv_ggr*(pseudo_density(i,k)/dz(i,k));
 
@@ -228,10 +446,10 @@ protected:
             SHF::linear_interp(team,zt_grid_s,zi_grid_s,rrho_s,rrho_i_s,nlev,nlev+1,0);
             team.team_barrier();
 
-            //const auto exner_int = PF::exner_function(p_int(i,nlevi_v)[nlevi_p]);
-            //const auto inv_exner_int_surf = 1/exner_int;
+            const auto exner_int = PF::exner_function(p_int(i,nlevi_v)[nlevi_p]);
+            const auto inv_exner_int_surf = 1/exner_int;
 
-            wpthlp_sfc(i) = surf_sens_flux(i)/rrho_i(i,nlevi_v)[nlevi_p]; //(surf_sens_flux(i)/(cpair*rrho_i(i,nlevi_v)[nlevi_p]))*inv_exner_int_surf;
+            wpthlp_sfc(i) = (surf_sens_flux(i)/(cpair*rrho_i(i,nlevi_v)[nlevi_p]))*inv_exner_int_surf;
             wprtp_sfc(i)  = surf_evap(i)/rrho_i(i,nlevi_v)[nlevi_p];
             upwp_sfc(i)   = surf_mom_flux(i,0)/rrho_i(i,nlevi_v)[nlevi_p];
             vpwp_sfc(i)   = surf_mom_flux(i,1)/rrho_i(i,nlevi_v)[nlevi_p];
@@ -711,5 +929,9 @@ protected:
     view_1d water_flux;
     view_1d ice_flux;
     view_1d heat_flux;
+
+    // Use the ShocData class
+    ShocData m_shoc;
+
 }; // SHOCInterface
 #endif
