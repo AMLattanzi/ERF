@@ -39,13 +39,37 @@ using  Int=int;
 #include <stdexcept>
 #include <functional>
 #include <cmath>
+#include <iomanip>
+
 class ShocData {
+private:
+  /*
+    // E3SM atmospheric constants
+    static constexpr double P0    = 1.0e5;           // reference pressure [Pa]
+    static constexpr double Rd    = 287.04;         // E3SM dry air gas constant [J/kg/K]
+    static constexpr double Rv    = 461.52;         // E3SM water vapor gas constant [J/kg/K]
+    static constexpr double cpair = 1004.64;        // E3SM specific heat at constant pressure [J/kg/K]
+    static constexpr double g     = 9.80616;        // E3SM gravity constant [m/s^2]
+    static constexpr double kappa = Rd / cpair;     // R_d / c_p
+    static constexpr double zvir  = Rv / Rd - 1.0;  // ~0.608
+    static constexpr double latvap = 2.501e6;       // Latent heat of vaporization [J/kg]
+  */
 public:
+     // E3SM atmospheric constants
+    static constexpr double P0    = 1.0e5;           // reference pressure [Pa]
+    static constexpr double Rd    = 287.04;         // E3SM dry air gas constant [J/kg/K]
+    static constexpr double Rv    = 461.52;         // E3SM water vapor gas constant [J/kg/K]
+    static constexpr double cpair = 1004.64;        // E3SM specific heat at constant pressure [J/kg/K]
+    static constexpr double g     = 9.80616;        // E3SM gravity constant [m/s^2]
+    static constexpr double kappa = Rd / cpair;     // R_d / c_p
+    static constexpr double zvir  = Rv / Rd - 1.0;  // ~0.608
+    static constexpr double latvap = 2.501e6;       // Latent heat of vaporization [J/kg]
+
     // Default constructor
     ShocData () = default;
 
     // Specified file constructor
-    ShocData (std::string fname) : filename(fname) {}
+    ShocData (std::string fname) : ifname(fname) {}
 
     // Move constructor
     ShocData (ShocData&& src) {
@@ -55,22 +79,31 @@ public:
         dz = src.dz;
 
         zsurf = src.zsurf;
-        cldfrac_l = src.cldfrac_l;
 
-        drag_coeff_s = src.drag_coeff_s;
         qfx_s = src.qfx_s;
         hfx_s = src.hfx_s;
         t13_s = src.t13_s;
         t23_s = src.t23_s;
+        wqt_s = src.wqt_s;
+        wthl_s = src.wthl_s;
+
+        wm_zt = src.wm_zt;
+        drag_coeff_s = src.drag_coeff_s;
 
         u    = src.u;
         v    = src.v;
         tke  = src.tke;
         qv   = src.qv;
         qc   = src.qc;
-        tmid = src.tmid;
         thd  = src.thd;
-        p    = src.p;
+        pmid = src.pmid;
+        pint = src.pint;
+        pdel = src.pdel;
+        inv_exner = src.inv_exner;
+        tk   = src.tk;
+        tkh  = src.tkh;
+        cloud_frac = src.cloud_frac;
+        thv  = src.thv;
     }
 
     // Default destructor
@@ -80,58 +113,163 @@ public:
     void
     init_hse_pressure_temp ()
     {
-        // Constants
-        static constexpr double g     = 9.81;
-        static constexpr double P0    = 1.0e5;
-        static constexpr double Rd    = 287.0;
-        static constexpr double Rv    = 461.505;
-        static constexpr double gamma = 1.4;
 
-        // Derived quantities
-        double rvOrd = Rv/Rd;
-        double gmone = gamma - 1.;
-        double num   = - g * gmone;
-        double den   = gamma * P0 * pow(Rd/P0, gamma);
+        // DYCOMS RF01 surface pressure (Stevens et al. 2005)
+        const double ps = 101780.0;  // Pa
 
-        // EOS functions
-        std::function<double(double,double,double)> PgivenRandThandQv = [=] (double r, double th, double qv)
-            {
-                return ( P0 * pow(r*Rd*th*(1. + rvOrd*qv)/P0, gamma) );
-            };
+        // Bottom interface pressure
+        pint[0] = ps;
 
-        std::function<double(double,double,double)> TgivenPandRandQv = [=] (double p, double r, double qv)
-            {
-                return ( p / (r*Rd*(1. + rvOrd*qv) ) );
-            };
+        // Loop over layers to compute pmid (p), pint, and Tmid
+        for (int k = 0; k < nz; ++k) {
 
-        // Populate T and P
-        pint[0]    = PgivenRandThandQv(rho_s,thd[0],qv[0]);
-        double z   = 0.5 * dz + zsurf;
-        double val = num * z / (den * pow(thd[0], gamma)) + pow(rho_s, gmone);
-        double rho = pow(val, 1./gmone);
-        p[0]       = PgivenRandThandQv(rho,thd[0],qv[0]);
-        tmid[0]    = TgivenPandRandQv(p[0],rho,qv[0]);
-        for (int k(1); k<nz; ++k) {
-            z   = (double) (k + 0.5) * dz + zsurf;
-            val = num * z / (den * pow(thd[k], gamma)) + pow(rho_s, gmone);
-            rho = pow(val, 1./gmone);
-            p[k]    = PgivenRandThandQv(rho,thd[k],qv[k]);
-            tmid[k] = TgivenPandRandQv(p[k],rho,qv[k]);
-            pint[k] = 0.5 * (p[k] + p[k-1]);
+            const double p_bot = pint[k];   // bottom interface of layer
+            double pmid_k = p_bot;          // initial guess for mid-layer pressure
+            double Tv_k   = 0.0;            // layer virtual temperature
+            double p_top  = p_bot;          // top interface pressure
+
+            // Simple fixed-point iteration to make p, T, Tv, and hydrostatic consistent
+            for (int iter = 0; iter < 6; ++iter) {
+
+                // Temperature from "theta" (we'll fill thd with DYCOMS theta_l)
+                const double T_k = thd[k] * std::pow(pmid_k / P0, kappa);
+
+                // Virtual temperature using qv, qc
+                Tv_k = T_k * (1.0 + zvir * qv[k] - qc[k]);
+
+                // Hydrostatic: p_top from p_bot over thickness dz (Tv assumed constant in layer)
+                const double exponent = - g * dz / (Rd * Tv_k);
+                p_top = p_bot * std::exp(exponent);
+
+                // New mid-layer pressure as average of top and bottom interfaces
+                const double pmid_new = 0.5 * (p_bot + p_top);
+
+                // Convergence check (tolerance in Pa)
+                if (std::abs(pmid_new - pmid_k) < 1.0e-2) {
+                    pmid_k = pmid_new;
+                    break;
+                }
+
+                pmid_k = pmid_new;
+            }
+
+            // Store mid-layer pressure
+            pmid[k] = pmid_k;
+
+            // Temperature at mid-layer
+            const double T_k_final = thd[k] * std::pow(pmid_k / P0, kappa);
+            tmid[k] = T_k_final;
+
+            // Store top interface pressure
+            pint[k+1] = p_top;
         }
-        z   = (double) (nz + 0.5) * dz + zsurf;
-        val = num * z / (den * pow(thd[nz-1], gamma)) + pow(rho_s, gmone);
-        rho = pow(val, 1./gmone);
-        double pghost = PgivenRandThandQv(rho,thd[nz-1],qv[nz-1]);
-        pint[nz] = 0.5 * (p[nz-1] + pghost);
+
+        // Calculate pressure layer thickness for each level
+        for (int k = 0; k < nz; ++k) {
+            pdel[k] = pint[k] - pint[k+1];
+        }
+
+        // Calculate inverse Exner function: inv_exner = (P0/pmid)^kappa
+        for (int k = 0; k < nz; ++k) {
+            inv_exner[k] = std::pow(P0 / pmid[k], kappa);
+        }
+
+        // Calculate virtual potential temperature: thv = thd * (1 + zvir * qv - qc)
+        for (int k = 0; k < nz; ++k) {
+            thv[k] = thd[k] * (1.0 + zvir * qv[k] - qc[k]);
+        }
+
     }
+
+    // ----- DYCOMS RF01 thermodynamic profiles -----
+    // Liquid-water potential temperature profile (theta_l) for DYCOMS RF01
+    double theta_l_DYCOMS (double z) const
+    {
+        // DYCOMS-II RF01 mean-state liquid-water potential temperature (theta_l)
+        //   theta_l = 289.0 K,                        z <= zi
+        //   theta_l = 297.5 K + (z - zi)^(1/3),       z >  zi
+        //  with zi = 840 m and z in meters.
+
+        const double zi       = 840.0;    // inversion height [m]
+        const double thl_bl   = 289.0;    // K (below inversion)
+        const double thl_plus = 297.5;   // K  (just above inversion)
+
+        if (z <= zi) {
+            return thl_bl;
+        } else {
+            return thl_plus + std::pow(z - zi, 1.0/3.0);
+        }
+    }
+
+    // Total water mixing ratio profile (q_t) for DYCOMS RF01
+    double qt_DYCOMS (double z) const
+    {
+        // DYCOMS-II RF01 total water specific humidity (q_t)
+        //   q_t =  9.0 g/kg,  z <= zi
+        //   q_t =  1.5 g/kg,  z >  zi
+        // Convert to kg/kg for the model.
+
+        const double zi    = 840.0;    // m
+        const double qt_bl = 9.0e-3;   // 9 g/kg -> kg/kg
+        const double qt_ft = 1.5e-3;   // 1.5 g/kg -> kg/kg
+
+        if (z <= zi) {
+            return qt_bl;
+        } else {
+            return qt_ft;
+        }
+    }
+
+    // Build DYCOMS-based vertical profiles for thd, qv, qc
+    void init_dycoms_profiles ()
+    {
+        for (int k = 0; k < nz; ++k) {
+            // Mid-level height
+            double z_mid = zsurf + (k + 0.5) * dz;
+
+            // DYCOMS profiles
+            double thl = theta_l_DYCOMS(z_mid); // [K]
+            double qt  = qt_DYCOMS(z_mid);      // [kg/kg]
+
+            // For now: treat theta_l ≈ theta, and put all water in vapor
+            thd[k] = thl;
+            qv[k]  = qt;
+            qc[k]  = 0.0;
+        }
+    }
+
+    // Calculate vertical velocity from divergence for DYCOMS case
+    void calc_vertical_velocity ()
+    {
+        for (int k = 0; k < nz; ++k) {
+            // Mid-level height
+            double z_mid = zsurf + (k + 0.5) * dz;
+
+            // DYCOMS large-scale vertical velocity following Stevens et al 2005: wm_zt = -D * z
+            // where D is divergence [1/s] and z is height [m]
+            wm_zt[k] = -divergence * z_mid;  // [m/s]
+
+            // *** Alternative approach for omega-based vertical velocity (SHOC interface method) ***
+            //
+            // // Calculate reciprocal density factor: rrho = (1/g) * (pdel/dz)
+            // double rrho = (1.0 / g) * (pdel[k] / dz);
+            //
+            // // Convert omega [Pa/s] to vertical velocity [m/s]
+            // // wm_zt = -omega / (rrho * g)
+            // wm_zt[k] = -omega / (rrho * g);
+            //
+            // Note: This method requires omega [Pa/s] instead of divergence [1/s] as input,
+            //       and must be called AFTER init_hse_pressure_temp() to have pdel values available.
+        }
+    }
+
 
     // Read the ascii file and populate relevant data
     void
     init_from_ascii () {
-        std::ifstream input_file(filename);
+        std::ifstream input_file(ifname);
         if (!input_file) {
-            throw std::runtime_error("Cannot open: " + filename);
+            throw std::runtime_error("Cannot open: " + ifname);
         }
 
         // Parse the grid dimension header
@@ -152,13 +290,10 @@ public:
         double u_tmp   = 0.0;
         double v_tmp   = 0.0;
         double tke_tmp = 0.0;
-        double qv_tmp  = 0.0;
-        double qc_tmp  = 0.0;
-        double thd_tmp = 0.0;
-        std::vector<double*> data_ptr = {&dz    , &zsurf , &omega  ,
-                                    &qfx_s , &hfx_s , &t13_s  , &t23_s,
-                                    &u_tmp , &v_tmp , &tke_tmp,
-                                    &qv_tmp, &qc_tmp, &thd_tmp  };
+        double drag_coeff_tmp = 0.0;  // temporary variable for drag coefficient
+        std::vector<double*> data_ptr = {&dz    , &zsurf , &divergence  , &tke_tmp,
+                                         &qfx_s , &hfx_s , &drag_coeff_tmp,
+                                         &u_tmp , &v_tmp};
         while (input_file >> next_line) {
             if (next_line[0] == '#') {
                 getline(input_file, next_line);
@@ -168,48 +303,165 @@ public:
             ++idx;
         }
 
-        // Initialize the cloud fraction
-        cldfrac_l = (qc_tmp > 0.) ? 1. : 0.;
+        // Store drag coefficient
+        drag_coeff_s = drag_coeff_tmp;
 
-        // Initialize the drag coeff
-        // NOTE: tau_tot = -rho * Cd * wsp^2, multiply by u/wsp to get tau_13
-        drag_coeff_s = t13_s / (-rho_s * sqrt(u_tmp*u_tmp+v_tmp*v_tmp) * u_tmp);
-        if (drag_coeff_s < 0.) { throw std::runtime_error("Drag coeff must be positive!"); }
+        // Convert surface fluxes from W/m² to kinematic units (m/s)
+
+        // Convert latent heat flux: W/m² -> kg/kg⋅m/s (kinematic)
+        wqt_s = qfx_s / (latvap * rho_s);  // kinematic moisture flux [kg/kg⋅m/s]
+
+        // Convert sensible heat flux: W/m² -> K⋅m/s (kinematic)
+        wthl_s = hfx_s / (cpair * rho_s);  // kinematic heat flux [K⋅m/s]
+
+        // Calculate surface momentum fluxes using bulk aerodynamic formula
+        // tau = -rho * Cd * |U| * U_component
+        const double wind_speed = std::sqrt(u_tmp * u_tmp + v_tmp * v_tmp);
+        t13_s = -rho_s * drag_coeff_s * wind_speed * u_tmp;  // x-momentum flux [N/m²]
+        t23_s = -rho_s * drag_coeff_s * wind_speed * v_tmp;  // y-momentum flux [N/m²]
+
+        // Convert momentum fluxes to kinematic units: N/m² -> m²/s²
+        t13_s = t13_s / rho_s;  // kinematic x-momentum flux [m²/s²]
+        t23_s = t23_s / rho_s;  // kinematic y-momentum flux [m²/s²]
 
         // Initialize the vector data
-        u.resize(nz, u_tmp);
-        v.resize(nz, v_tmp);
-        tke.resize(nz, tke_tmp);
-        qv.resize(nz, qv_tmp);
-        qc.resize(nz, qc_tmp);
-        thd.resize(nz, thd_tmp);
-        p.resize(nz, 0.);
-        pint.resize(nz+1, 0.);
-        tmid.resize(nz, 0.);
+        u.assign(nz, u_tmp);
+        v.assign(nz, v_tmp);
+        tke.assign(nz, tke_tmp);
 
-        // Populate T and P with HSE solution for
-        // constant Thd/qv
+        // Allocate thermodynamic profiles (values will be set to DYCOMS)
+        qv.resize(nz);
+        qc.resize(nz);
+        thd.resize(nz);
+        pmid.assign(nz, 0.);
+        pint.assign(nz+1, 0.);
+        tmid.assign(nz, 0.);
+        wm_zt.resize(nz);
+        pdel.resize(nz);
+        inv_exner.resize(nz);
+        tk.assign(nz, 0.0);      // Initialize momentum eddy diffusivity to zero
+        tkh.assign(nz, 0.0);     // Initialize heat eddy diffusivity to zero
+        cloud_frac.assign(nz, 0.0); // Initialize cloud fraction to zero
+        thv.resize(nz);          // Virtual potential temperature will be calculated
+
+        // Build DYCOMS-based thd, qv, qc profiles
+        init_dycoms_profiles();
+
+        // Populate T and P with HSE solution for constant Thd/qv
         init_hse_pressure_temp();
+
+        // Calculate vertical velocity from omega
+        calc_vertical_velocity();
+
+        // Close the input file
+        input_file.close();
     }
 
+    // Write the state to three ascii files:
+    //   - surface / meta variables
+    //   - zt-grid (thermodynamic mid-levels)
+    //   - zi-grid (interface levels)
+    void
+    write_state ()
+    {
+        // ------------------------------------------------------------------
+        // 1) Surface / meta-data file
+        // ------------------------------------------------------------------
+        const std::string surf_fname = "ShocInOut_IC_surface_vars.txt";
+        std::ofstream surf_file(surf_fname);
+        if (!surf_file) {
+            throw std::runtime_error("Cannot open: " + surf_fname);
+        }
+
+        surf_file << "# Surface and case meta-data\n";
+        surf_file << "# nz(-), dz(m), zsurf(m), wqt_s(kg/kg⋅m/s), wthl_s(K⋅m/s), t13_s(m²/s²), t23_s(m²/s²)\n";
+        surf_file << std::setprecision(15) << std::fixed;
+        surf_file << nz        << "\n";
+        surf_file << dz        << "\n";
+        surf_file << zsurf     << "\n";
+        surf_file << wqt_s     << "\n";
+        surf_file << wthl_s    << "\n";
+        surf_file << t13_s     << "\n";
+        surf_file << t23_s     << "\n";
+        surf_file.close();
+
+        // ------------------------------------------------------------------
+        // 2) zt-grid file (thermodynamic mid-levels)
+        // ------------------------------------------------------------------
+        const std::string zt_fname = "ShocInOut_IC_zt_grid.txt";
+        std::ofstream zt_file(zt_fname);
+        if (!zt_file) {
+            throw std::runtime_error("Cannot open: " + zt_fname);
+        }
+
+        zt_file << "# Thermodynamic (zt) grid profiles\n";
+        zt_file << "# nz = " << nz << "\n";
+        zt_file << "# k(-)  zt_g(m)  u(m/s)  v(m/s)  wm_zt(m/s)  tke(m²/s²)  thv(K)  thl(K)  qt(kg/kg)  qc(kg/kg)  pmid(Pa)  pdel(Pa)  inv_exner(-)  tk(m²/s)  tkh(m²/s)  cloud_frac(-)\n";
+        zt_file << std::setprecision(15) << std::fixed;
+
+        for (int k = 0; k < nz; ++k) {
+            double zt_g = zsurf + (k + 0.5) * dz;  // mid-level height
+            zt_file << k        << " "
+                    << zt_g     << " "            // zt_grid
+                    << u[k]     << " "            // u-velocity (Ug from DYCOMS)
+                    << v[k]     << " "            // v-velocity (Vg from DYCOMS)
+                    << wm_zt[k] << " "            // vertical velocity from divergence (DYCOMS)
+                    << tke[k]   << " "
+                    << thv[k]   << " "            // virtual potential temperature
+                    << thd[k]   << " "            // thl liquid water potential temperature from DYCOMS
+                    << qv[k]    << " "            // qt from DYCOMS
+                    << qc[k]    << " "            // cloud water mixing ratio for (zeros)
+                    << pmid[k]  << " "            // pmid
+                    << pdel[k]  << " "            // pdel
+                    << inv_exner[k] << " "        // inv_exner
+                    << tk[k]    << " "            // momentum eddy diffusivity
+                    << tkh[k]   << " "            // heat eddy diffusivity
+                    << cloud_frac[k] << "\n";     // cloud fraction for shoc_ql variable (zeros)
+        }
+        zt_file.close();
+
+        // ------------------------------------------------------------------
+        // 3) zi-grid file (interface levels)
+        // ------------------------------------------------------------------
+        const std::string zi_fname = "ShocInOut_IC_zi_grid.txt";
+        std::ofstream zi_file(zi_fname);
+        if (!zi_file) {
+            throw std::runtime_error("Cannot open: " + zi_fname);
+        }
+
+        zi_file << "# Interface (zi) grid profiles\n";
+        zi_file << "# nz_interfaces = " << (nz + 1) << "\n";
+        zi_file << "# k(-)  zi_g(m)  pint(Pa)\n";
+        zi_file << std::setprecision(15) << std::fixed;
+
+        for (int k = 0; k <= nz; ++k) {
+            double zi_g = zsurf + k * dz;  // interface height
+            zi_file << k        << " "
+                    << zi_g     << " "
+                    << pint[k]  << "\n";
+        }
+        zi_file.close();
+    }
+
+
+    // Print the state the stdout for user to see
     void
     print_state ()
     {
         std::cout << "Grid dimensions (nx, ny, nz): (" << nx << ' ' << ny << ' ' << nz << ")" << "\n";
         std::cout << "Bottom layer at z = " << zsurf << " with spacing dz = " << dz << "\n";
-        std::cout << "Omega      = " << omega << "\n";
-        std::cout << "Cld frac   = " << cldfrac_l << "\n";
-        std::cout << "Drag coeff = " << drag_coeff_s << "\n";
-        std::cout << "Kinematic latent surf flux   = " << qfx_s << "\n";
-        std::cout << "Kinematic sensible surf flux = " << hfx_s << "\n";
+        std::cout << "Divergence = " << divergence << "\n";
+        std::cout << "Kinematic latent surf flux   = " << wqt_s << "\n";
+        std::cout << "Kinematic sensible surf flux = " << wthl_s << "\n";
         std::cout << "Kinematic (U,V) surf flux    = (" << t13_s << ' ' << t23_s << ")" << "\n";
         std::cout << "\n";
-        std::cout << "( k, z, u, v, tke, qv, qc, thd, t, p, pint )" << "\n";
+        std::cout << "( k, z, u, v, wm_zt, tke, qt, qc, thl, t, p, pint, pdel, inv_exner, tk, tkh, cloud_frac, thv )" << "\n";
         for (int k(0); k<nz; ++k) {
             double z = (double) (k+0.5) * dz;
             std::cout << "( " << k << "  " << z << "  " << u[k] << "  " << v[k] << "  "
-                 << tke[k] << "  " << qv[k] << "  " << qc[k] << "  " << thd[k] << "  "
-                 << tmid[k] << "  " << p[k] << "  " << pint[k] << " )" << "\n";
+                 << wm_zt[k] << "  " << tke[k] << "  " << qv[k] << "  " << qc[k] << "  " << thd[k] << "  "
+                 << tmid[k] << "  " << pmid[k] << "  " << pint[k] << "  " << pdel[k] << "  " << inv_exner[k] << "  "
+                 << tk[k] << "  " << tkh[k] << "  " << cloud_frac[k] << "  " << thv[k] << " )" << "\n";
 
         }
     }
@@ -217,7 +469,10 @@ public:
     // Data members
     //======================================
     // File to open and work on
-    std::string filename = "./ShocInOut.txt";
+    std::string ifname = "./main_e3sm_input.txt";//"./ShocInOut.txt";
+
+    // File to write to
+    std::string ofname = "./ShocInOut_IC_e3sm.txt";
 
     // Grid dimensions
     int nx, ny, nz;
@@ -228,21 +483,28 @@ public:
     // 1D data structure (surface height)
     double zsurf;
 
-    // 1D data structure (cloud fraction liq)
-    double cldfrac_l;
-
-    // 1D data structure (omega)
-    double omega;
+    // 1D data structure (divergence)
+    double divergence;
 
     // 1D data structures (surface fluxes)
+    double qfx_s, hfx_s, t13_s, t23_s;   // Input fluxes in W/m² and calculated momentum fluxes
+    double wqt_s, wthl_s;                 // Kinematic fluxes: moisture and heat
+
+    // Surface drag coefficient
     double drag_coeff_s;
-    double qfx_s, hfx_s, t13_s, t23_s;
 
-    // Column data that is homogeneous
-    std::vector<double> u, v, tke, qv, qc, thd, tmid, p, pint;
+    // Column data
+    std::vector<double> u, v, tke, qv, qc, thd, tmid, pmid, pint;
+    std::vector<double> wm_zt;        // Vertical velocity from divergence or omega [m/s]
+    std::vector<double> pdel;         // Pressure layer thickness [Pa]
+    std::vector<double> inv_exner;    // Inverse Exner function (dimensionless)
+    std::vector<double> tk;           // Momentum eddy diffusivity [m²/s]
+    std::vector<double> tkh;          // Heat eddy diffusivity [m²/s]
+    std::vector<double> cloud_frac;   // Cloud fraction [-]
+    std::vector<double> thv;          // Virtual potential temperature [K]
 
-    // Specified density at surface
-    static constexpr double rho_s = 1.0;
+    // Specified density at surface based on Stevens et al 2005
+    static constexpr double rho_s = 1.22;
 };
 
 

@@ -363,6 +363,7 @@ void
 SHOCInterface::shocdata_to_kokkos_buffers ()
 {
     m_shoc.init_from_ascii();
+    //m_shoc.print_state();
 
     //
     // Expose for device capture
@@ -416,20 +417,20 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
             //=======================================================
             horiz_wind_d(icol,0,ilay)  = m_shoc.u[k];
             horiz_wind_d(icol,1,ilay)  = m_shoc.v[k];
-            cldfrac_liq_d(icol,ilay)   = m_shoc.cldfrac_l;
+            cldfrac_liq_d(icol,ilay)   = m_shoc.cloud_frac[k];
             tke_d(icol,ilay)           = m_shoc.tke[k];
             qc_d(icol,ilay)            = m_shoc.qc[k];
 
             // Interface data structures
             //=======================================================
             // eamxx_common_physics_functions_impl.hpp: calculate_vertical_velocity
-            omega_d(icol,ilay)           = m_shoc.omega;
+            omega_d(icol,ilay)           = m_shoc.wm_zt[k];
             if (k==0) {
-                surf_mom_flux_d(icol,0)  = m_shoc.t13_s;
-                surf_mom_flux_d(icol,1)  = m_shoc.t23_s;
+                surf_mom_flux_d(icol,0)  = m_shoc.t13_s*m_shoc.rho_s;
+                surf_mom_flux_d(icol,1)  = m_shoc.t23_s*m_shoc.rho_s;
                 // No unit conversion to W/m^2 (ERF_ShocInterface.H L224)
                 surf_sens_flux_d(icol)   = m_shoc.hfx_s;
-                surf_evap_d(icol)        = m_shoc.qfx_s;
+                surf_evap_d(icol)        = m_shoc.qfx_s/m_shoc.latvap;
                 // Back out the drag coeff
                 surf_drag_coeff_tms_d(icol) = m_shoc.drag_coeff_s;
             }
@@ -438,7 +439,7 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
 
             // Input data structures
             //=======================================================
-            p_mid_d(icol,ilay)       = m_shoc.p[k];
+            p_mid_d(icol,ilay)       = m_shoc.pmid[k];
             p_int_d(icol,ilay)       = m_shoc.pint[k];
             // eamxx_common_physics_functions_impl.hpp: calculate_density
             pseudo_dens_d(icol,ilay) = m_shoc.pint[k] - m_shoc.pint[k+1];
@@ -659,6 +660,8 @@ SHOCInterface::kokkos_buffers_to_mf (const Real dt)
         const Array4<Real>& u_tend_arr     = u_tend.array(mfi);
         const Array4<Real>& v_tend_arr     = v_tend.array(mfi);
 
+        Print() << " ilay u v tke qv qc T P " << "\n";
+
         // Print the data
         ParallelFor(vbx_cc, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
@@ -668,7 +671,6 @@ SHOCInterface::kokkos_buffers_to_mf (const Real dt)
             const int ilay   = kmax - k;
 
             if (i==0 && j==0) {
-                Print() << " ilay u v tke qv qc T P " << "\n";
                 Print() << ilay << ' ' << horiz_wind_d(icol,0,ilay)[0] << ' ' << horiz_wind_d(icol,1,ilay)[0] << ' '
                         << tke_d(icol,ilay)[0] << ' ' << qv_d(icol,ilay)[0] << ' ' << qc_d(icol,ilay)[0] << ' '
                         << T_mid_d(icol,ilay)[0] << ' ' << p_mid_d(icol,ilay)[0] << "\n";

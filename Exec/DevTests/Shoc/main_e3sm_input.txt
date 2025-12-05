@@ -1,0 +1,17 @@
+# Grid dimensions (nx, ny, nz)
+1
+1
+300
+
+# 1D dycore data structures (constant in space)
+# variable list:
+# (dz, zsurf, Div (1/s), tke_min, qfx_s (W/m2), hfx_s (W/m2), drag_coeff_s, ug, vg)
+10.0
+0.0
+3.75e-6
+0.0004
+115.0
+15.0
+0.0011
+7.0
+-5.5
