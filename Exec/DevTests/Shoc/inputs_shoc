@@ -26,7 +26,7 @@ erf.most.zref   = 10.0
 zhi.type = "SlipWall"
 
 # TIME STEP CONTROL
-erf.fixed_dt = 1.0
+erf.fixed_dt = 60.0
 erf.fixed_mri_dt_ratio = 6
 
 # DIAGNOSTICS & VERBOSITY

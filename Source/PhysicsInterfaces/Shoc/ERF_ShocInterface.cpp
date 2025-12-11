@@ -109,27 +109,69 @@ ERF::compute_shoc_tendencies (int lev,
 
     Print() << "Done advancing SHOC\n";
     */
-
+  
     // Set up the way we normally would
     shoc_interface[lev]->set_grids(lev, cons->boxArray(), Geom(lev),
-                                       cons , xvel , yvel, zvel, w_subsid,
-                                       tau13, tau23, hfx3, qfx3,
-                                       eddyDiffs, z_phys_nd);
+                                   cons , xvel , yvel, zvel, w_subsid,
+                                   tau13, tau23, hfx3, qfx3,
+                                   eddyDiffs, z_phys_nd);
 
     shoc_interface[lev]->initialize_impl();
 
     // Now overwrite the data with ShocData class
     shoc_interface[lev]->shocdata_to_kokkos_buffers();
 
+    // Final step
+    int nstep = 21600/dt_advance;
+
+    // Write the header to the file
+    std::string ofname = "ERF_Shoc_Out.txt";
+    std::ofstream output_file(ofname);
+    if (!output_file) {
+      throw std::runtime_error("Cannot open: " + ofname);
+    }
+    output_file << " time ilay u v tke qv qc T P " << "\n";
+    
+        
     // Run Shoc with its outputs as inputs
-    for (int itime(0); itime<100; ++itime) {
-        Print() << "Advancing SHOC at iteration: " << itime << " ...";
+    Real my_time = 0.0;
+    for (int istep(0); istep<nstep; ++istep) {
+        Print() << "Advancing SHOC at iteration: " << istep << " ...";
         shoc_interface[lev]->run_impl(dt_advance);
-        Print() << "Done advancing SHOC\n";
+        my_time = (istep+1)*dt_advance;
+        Print() << "Done advancing SHOC at time: " << my_time << "\n";
+
+        if (std::fmod(my_time,60.) == 0) {
+          Print() << "Writing output to file\n";
+          shoc_interface[lev]->write_output_data(output_file,my_time);
+        }
     }
 
+    
     // Finalize and deallocate
     shoc_interface[lev]->finalize_impl(dt_advance);
+}
+
+
+void
+SHOCInterface::write_output_data (std::ofstream& output_file,
+                                  Real& my_time)
+{
+  auto thlm_d = m_buffer.thlm;
+  auto p_mid_d = p_mid;
+  auto T_mid_d = T_mid;
+  auto qv_d = qv;
+  auto horiz_wind_d = horiz_wind;
+  auto tke_d = tke;
+  auto qc_d  = qc;
+  
+  int icol = 0;
+  for (int ilay(m_num_layers-1); ilay>=0; --ilay) {
+    output_file << std::setprecision(15) << my_time << ' '
+                << ilay << ' ' <<  horiz_wind_d(icol,0,ilay)[0] << ' ' << horiz_wind_d(icol,1,ilay)[0] << ' '
+                << tke_d(icol,ilay)[0] << ' ' << qv_d(icol,ilay)[0] << ' ' << qc_d(icol,ilay)[0] << ' '
+                << T_mid_d(icol,ilay)[0] << ' ' << p_mid_d(icol,ilay)[0] << "\n";
+  }
 }
 
 

@@ -614,6 +614,10 @@ public:
                    const amrex::Box& tbx,
                    const amrex::Array4<amrex::Real>& cc_rhs_arr);
 
+    void
+    write_output_data (std::ofstream& output_file,
+                       Real& my_time);
+  
 #ifndef KOKKOS_ENABLE_CUDA
   // Cuda requires methods enclosing __device__ lambda's to be public
 protected:
