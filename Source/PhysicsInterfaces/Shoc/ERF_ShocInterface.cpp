@@ -483,7 +483,7 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
             // Interface data structures
             //=======================================================
             // eamxx_common_physics_functions_impl.hpp: calculate_vertical_velocity
-            omega_d(icol,ilay)           = m_shoc.wm_zt[k];
+            omega_d(icol,ilay)           = m_shoc.divergence;
             if (k==0) {
                 surf_mom_flux_d(icol,0)  = m_shoc.t13_s*m_shoc.rho_s;
                 surf_mom_flux_d(icol,1)  = m_shoc.t23_s*m_shoc.rho_s;
