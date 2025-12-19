@@ -642,6 +642,9 @@ protected:
             const Real inv_ggr = 1/ggr;
             const Real mintke  = SC::mintke;
 
+            //amrex::Print() << "zvir cpair ggr inv_ggr mintke \n";
+            //amrex::Print() << zvir << ' ' << cpair << ' ' << ggr << ' ' << inv_ggr << ' ' << mintke << "\n";
+
             const int nlev_packs = ekat::npack<Spack>(nlev);
 
             Kokkos::parallel_for(Kokkos::TeamVectorRange(team, nlev_packs), [&] (const Int& k)
@@ -671,18 +674,22 @@ protected:
                 // NOTE: theta_v (thv) is intentionally different from one in HOMME
                 const auto theta_zt = PF::calculate_theta_from_T(T_mid(i,k),p_mid(i,k));
                 thlm(i,k) = PF::calculate_thetal_from_theta(theta_zt,T_mid(i,k),qc(i,k));
+                //
                 thv(i,k)  = theta_zt*(1 + zvir*qv(i,k) - qc(i,k));
 
                 // Vertical layer thickness
+                //
                 dz(i,k) = PF::calculate_dz(pseudo_density(i,k), p_mid(i,k), T_mid(i,k), qv(i,k));
 
                 rrho(i,k) = inv_ggr*(pseudo_density(i,k)/dz(i,k));
 
+                //
                 wm_zt(i,k) = -1*omega(i,k)/(rrho(i,k)*ggr);
             });
             team.team_barrier();
 
             // Compute vertical layer heights
+            //
             const auto dz_s    = ekat::subview(dz,    i);
             const auto z_int_s = ekat::subview(z_int, i);
             const auto z_mid_s = ekat::subview(z_mid, i);
@@ -690,17 +697,21 @@ protected:
             team.team_barrier();
             PF::calculate_z_mid(team,nlev,z_int_s,z_mid_s);
             team.team_barrier();
-
+            //
+            
             const int nlevi_v = nlev/Spack::n;
             const int nlevi_p = nlev%Spack::n;
             Kokkos::parallel_for(Kokkos::TeamVectorRange(team, nlev_packs), [&] (const Int& k)
             {
-                zt_grid(i,k) = z_mid(i,k) - z_int(i, nlevi_v)[nlevi_p];
-                zi_grid(i,k) = z_int(i,k) - z_int(i, nlevi_v)[nlevi_p];
+              //
+              zt_grid(i,k) = z_mid(i,k) - z_int(i, nlevi_v)[nlevi_p];
+              //
+              zi_grid(i,k) = z_int(i,k) - z_int(i, nlevi_v)[nlevi_p];
 
                 // Dry static energy
                 shoc_s(i,k) = PF::calculate_dse(T_mid(i,k),z_mid(i,k),phis(i));
 
+                //
                 if (k+1 == nlev_packs) zi_grid(i,nlevi_v)[nlevi_p] = 0;
             });
             team.team_barrier();
@@ -712,6 +723,7 @@ protected:
             SHF::linear_interp(team,zt_grid_s,zi_grid_s,rrho_s,rrho_i_s,nlev,nlev+1,0);
             team.team_barrier();
 
+            //
             const auto exner_int = PF::exner_function(p_int(i,nlevi_v)[nlevi_p]);
             const auto inv_exner_int_surf = 1/exner_int;
 
@@ -719,6 +731,24 @@ protected:
             wprtp_sfc(i)  = surf_evap(i)/rrho_i(i,nlevi_v)[nlevi_p];
             upwp_sfc(i)   = surf_mom_flux(i,0)/rrho_i(i,nlevi_v)[nlevi_p];
             vpwp_sfc(i)   = surf_mom_flux(i,1)/rrho_i(i,nlevi_v)[nlevi_p];
+            //
+
+            /*
+            // HACK
+            amrex::Print() << "wpthlp wprt upwp vpwp \n";
+            amrex::Print() << wpthlp_sfc(i) << ' ' << wprtp_sfc(i) << ' ' << upwp_sfc(i) << ' ' << vpwp_sfc(i) << "\n";
+            amrex::Print() << "\n";
+            amrex::Print() << "T  P  Pi  th  thv  thlm  rho  rho_i  dz  zt_grid  zi_grid  qv  qc   qw\n";
+            for (int idx(299); idx>=0; --idx) {
+              amrex::Print() << T_mid(i,idx) << ' ' << p_mid(i,idx) << ' ' << p_int(i,idx+1) << ' '
+                             << PF::calculate_theta_from_T(T_mid(i,idx),p_mid(i,idx)) << ' ' << thv(i,idx) << ' '
+                             << thlm(i,idx) << ' '  << rrho(i,idx) << ' ' << rrho_i(i,idx+1) << ' '
+                             << dz(i,idx) << ' '<< zt_grid(i,idx) << ' ' << zi_grid(i,idx+1) << ' '
+                             << qv(i,idx) << ' ' << qc(i,idx) << ' ' << qw(i,idx) << "\n";
+            }
+            amrex::Print() << p_int(i,0) << ' ' << rrho_i(i,0) << ' ' << zi_grid(i,0) << "\n";
+            exit(0);
+            */
         } // operator
 
         // Local variables

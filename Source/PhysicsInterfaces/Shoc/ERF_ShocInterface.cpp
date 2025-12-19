@@ -437,7 +437,23 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
 
     // Enforce the correct grid heights and density
     //=======================================================
-    auto dz_d = m_buffer.dz;
+    auto z_mid       = m_buffer.z_mid;
+    auto z_int       = m_buffer.z_int;
+    auto wpthlp_sfc  = m_buffer.wpthlp_sfc;
+    auto wprtp_sfc   = m_buffer.wprtp_sfc;
+    auto upwp_sfc    = m_buffer.upwp_sfc;
+    auto vpwp_sfc    = m_buffer.vpwp_sfc;
+    //auto rrho        = m_buffer.rrho;
+    //auto rrho_i      = m_buffer.rrho_i;
+    auto thv         = m_buffer.thv;
+    auto dz          = m_buffer.dz;
+    auto zt_grid     = m_buffer.zt_grid;
+    auto zi_grid     = m_buffer.zi_grid;
+    auto wm_zt       = m_buffer.wm_zt;
+    auto inv_exner   = m_buffer.inv_exner;
+    auto thlm        = m_buffer.thlm;
+    auto qw          = m_buffer.qw;
+    //auto dse         = m_buffer.dse;
 
     int  nlay  = m_num_layers;
     for (MFIter mfi(*m_cons); mfi.isValid(); ++mfi) {
@@ -454,7 +470,8 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
             // map [i,j,k] 0-based to [icol, ilay] 0-based
             const int icol   = (j-jmin)*nx + (i-imin) + offset;
             const int ilay   = kmax - k;
-
+            const int ilayi  = kmax + 1 - k;
+            
             // Input/Output data structures
             //=======================================================
             horiz_wind_d(icol,0,ilay)  = m_shoc.u[k];
@@ -475,6 +492,12 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
                 surf_evap_d(icol)        = m_shoc.qfx_s/m_shoc.latvap;
                 // Back out the drag coeff
                 surf_drag_coeff_tms_d(icol) = m_shoc.drag_coeff_s;
+
+                // Kinematic fluxes
+                wpthlp_sfc(icol) = m_shoc.wthl_s;
+                wprtp_sfc(icol)  = m_shoc.wqt_s;
+                upwp_sfc(icol)   = m_shoc.t13_s;
+                vpwp_sfc(icol)   = m_shoc.t23_s;
             }
             T_mid_d(icol,ilay)          = m_shoc.tmid[k];
             qv_d(icol,ilay)             = m_shoc.qv[k];
@@ -482,18 +505,29 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
             // Input data structures
             //=======================================================
             p_mid_d(icol,ilay)       = m_shoc.pmid[k];
-            p_int_d(icol,ilay)       = m_shoc.pint[k];
+            p_int_d(icol,ilayi)      = m_shoc.pint[k];
             // eamxx_common_physics_functions_impl.hpp: calculate_density
             pseudo_dens_d(icol,ilay) = m_shoc.pint[k] - m_shoc.pint[k+1];
             // Enforce the grid spacing
-            dz_d(icol,ilay) = m_shoc.dz;
+            dz(icol,ilay)       = m_shoc.dz;
+            zt_grid(icol,ilay)  = m_shoc.zsurf + (k + 0.5) * m_shoc.dz;
+            zi_grid(icol,ilayi) = m_shoc.zsurf + (k      ) * m_shoc.dz;
+            z_mid(icol,ilay)    = zt_grid(icol,ilay);
+            z_int(icol,ilayi)   = zi_grid(icol,ilayi);
+            // Vertical velocity divergence
+            wm_zt(icol,ilay) = m_shoc.wm_zt[k];
+            // Inv exner
+            inv_exner(icol,ilay) = m_shoc.inv_exner[k];
+            // Thv
+            thv(icol,ilay) = m_shoc.thv[k];
             // Surface geopotential
             if (k==0) {
                 phis_d(icol) = CONST_GRAV * m_shoc.zsurf;
             }
-
-            if (ilay==(nlay-1)) {
-                p_int_d(icol,ilay+1) = m_shoc.pint[k+1];
+            // Interface top levels
+            if (ilay==0) {
+                p_int_d(icol,0) = m_shoc.pint[k+1];
+                zi_grid(icol,0) = m_shoc.zsurf + (k+1) * m_shoc.dz;
             }
         });
     }
