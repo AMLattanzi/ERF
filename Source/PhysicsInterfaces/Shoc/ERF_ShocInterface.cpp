@@ -121,9 +121,11 @@ ERF::compute_shoc_tendencies (int lev,
     // Now overwrite the data with ShocData class
     shoc_interface[lev]->shocdata_to_kokkos_buffers();
 
+    
     // Final step
-    int nstep = 21600/dt_advance;
+    int nstep = 1; //21600/dt_advance;
 
+    /*
     // Write the header to the file
     std::string ofname = "ERF_Shoc_Out.txt";
     std::ofstream output_file(ofname);
@@ -131,7 +133,7 @@ ERF::compute_shoc_tendencies (int lev,
       throw std::runtime_error("Cannot open: " + ofname);
     }
     output_file << " time ilay u v tke qv qc T P " << "\n";
-    
+    */
         
     // Run Shoc with its outputs as inputs
     Real my_time = 0.0;
@@ -141,10 +143,12 @@ ERF::compute_shoc_tendencies (int lev,
         my_time = (istep+1)*dt_advance;
         Print() << "Done advancing SHOC at time: " << my_time << "\n";
 
+        /*
         if (std::fmod(my_time,60.) == 0) {
           Print() << "Writing output to file\n";
           shoc_interface[lev]->write_output_data(output_file,my_time);
         }
+        */
     }
 
     
@@ -1260,7 +1264,7 @@ SHOCInterface::run_impl (const Real dt)
     // For now set the host timestep to the shoc timestep. This forces
     // number of SHOC timesteps (nadv) to be 1.
     // TODO: input parameter?
-    hdtime = dt;
+    hdtime = 21600.0; //dt;
     m_nadv = std::max(static_cast<int>(round(hdtime/dt)),1);
 
     // Reset internal WSM variables.
