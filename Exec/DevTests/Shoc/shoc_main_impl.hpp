@@ -6,6 +6,8 @@
 #include <ekat_team_policy_utils.hpp>
 #include <ekat_subview_utils.hpp>
 
+#include "share/util/eamxx_common_physics_functions.hpp"
+
 #include <iomanip>
 
 #include <iostream>
@@ -552,12 +554,18 @@ void Functions<S,D>::shoc_main_internal(
     check_tke_disp(shcol,nlev,tke);
 
     // HACK WRITE
+    update_host_dse_disp(shcol,nlev,thetal,shoc_ql, // Input
+                         inv_exner,zt_grid,phis,   // Input
+                         host_dse); 
     int icol = 0;
     for (int ilev(nlev-1); ilev>=0; --ilev) {
+        using PF  = scream::PhysicsFunctions<DefaultDevice>;
+        auto qv   = qw(icol,ilev)[0] - shoc_ql(icol,ilev)[0];
+        auto tabs = PF::calculate_temperature_from_dse(host_dse(icol,ilev),zt_grid(icol,ilev),phis(icol));
         output_file << std::setprecision(15) << static_cast<double>(t+1)*dtime << ' '
                     << ilev << ' ' <<  u_wind(icol,ilev)[0] << ' ' << v_wind(icol,ilev)[0] << ' '
-                    << tke(icol,ilev)[0] << ' ' << shoc_qv(icol,ilev)[0] << ' ' << shoc_ql(icol,ilev)[0] << ' '
-                    << shoc_tabs(icol,ilev)[0] << ' ' << pres(icol,ilev)[0] << "\n";
+                    << tke(icol,ilev)[0] << ' ' << qv << ' ' << shoc_ql(icol,ilev)[0] << ' '
+                    << tabs[0] << ' ' << pres(icol,ilev)[0] << "\n";
     }
   }
 
@@ -570,8 +578,8 @@ void Functions<S,D>::shoc_main_internal(
                        host_dse);                // Output
 
   shoc_energy_integrals_disp(shcol,nlev,host_dse,pdel,  // Input
-                        qw,shoc_ql,u_wind,v_wind, // Input
-                        se_a,ke_a,wv_a,wl_a);     // Output
+                             qw,shoc_ql,u_wind,v_wind, // Input
+                             se_a,ke_a,wv_a,wl_a);     // Output
 
   shoc_energy_fixer_disp(shcol,nlev,nlevi,dtime,nadv,zt_grid,zi_grid, // Input
                          se_b,ke_b,wv_b,wl_b,se_a,ke_a,wv_a,wl_a,    // Input

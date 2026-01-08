@@ -489,8 +489,8 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
             // eamxx_common_physics_functions_impl.hpp: calculate_vertical_velocity
             omega_d(icol,ilay)           = m_shoc.divergence;
             if (k==0) {
-                surf_mom_flux_d(icol,0)  = m_shoc.t13_s*m_shoc.rho_s;
-                surf_mom_flux_d(icol,1)  = m_shoc.t23_s*m_shoc.rho_s;
+                surf_mom_flux_d(icol,0)  = m_shoc.t13_s;
+                surf_mom_flux_d(icol,1)  = m_shoc.t23_s;
                 // No unit conversion to W/m^2 (ERF_ShocInterface.H L224)
                 surf_sens_flux_d(icol)   = m_shoc.hfx_s;
                 surf_evap_d(icol)        = m_shoc.qfx_s/m_shoc.latvap;
@@ -505,6 +505,8 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
             }
             T_mid_d(icol,ilay)          = m_shoc.tmid[k];
             qv_d(icol,ilay)             = m_shoc.qv[k];
+
+            if (icol==0) Print() << std::setprecision(15) << "Tmid IC: " << ilay << ' ' << T_mid_d(icol,ilay) << "\n";
 
             // Input data structures
             //=======================================================
