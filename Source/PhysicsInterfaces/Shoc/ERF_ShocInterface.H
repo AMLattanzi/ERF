@@ -672,8 +672,8 @@ protected:
 
                 // Temperature
                 // NOTE: theta_v (thv) is intentionally different from one in HOMME
-                const auto theta_zt = PF::calculate_theta_from_T(T_mid(i,k),p_mid(i,k));
-                thlm(i,k) = PF::calculate_thetal_from_theta(theta_zt,T_mid(i,k),qc(i,k));
+                //const auto theta_zt = PF::calculate_theta_from_T(T_mid(i,k),p_mid(i,k));
+                //thlm(i,k) = PF::calculate_thetal_from_theta(theta_zt,T_mid(i,k),qc(i,k));
                 //
                 //thv(i,k)  = theta_zt*(1 + zvir*qv(i,k) - qc(i,k));
 
@@ -740,16 +740,16 @@ protected:
             amrex::Print() << "wpthlp wprt upwp vpwp \n";
             amrex::Print() << wpthlp_sfc(i) << ' ' << wprtp_sfc(i) << ' ' << upwp_sfc(i) << ' ' << vpwp_sfc(i) << "\n";
             amrex::Print() << "\n";
-            amrex::Print() << "T  P  Pi  th  thv  thlm  rho  rho_i  dz  zt_grid  zi_grid  qv  qc  qw  wm_zt\n";
+            amrex::Print() << "ilay k T  P  Pi  th  thv  thlm  rho  rho_i  dz  zt_grid  zi_grid  qv  qc  qw  wm_zt\n";
             for (int idx(299); idx>=0; --idx) {
-              amrex::Print() << T_mid(i,idx) << ' ' << p_mid(i,idx) << ' ' << p_int(i,idx+1) << ' '
+                amrex::Print() << idx << ' ' << 299-idx << ' ' << T_mid(i,idx) << ' ' << p_mid(i,idx) << ' ' << p_int(i,idx+1) << ' '
                              << PF::calculate_theta_from_T(T_mid(i,idx),p_mid(i,idx)) << ' ' << thv(i,idx) << ' '
                              << thlm(i,idx) << ' '  << rrho(i,idx) << ' ' << rrho_i(i,idx+1) << ' '
                              << dz(i,idx) << ' '<< zt_grid(i,idx) << ' ' << zi_grid(i,idx+1) << ' '
                              << qv(i,idx) << ' ' << qc(i,idx) << ' ' << qw(i,idx) << ' ' << wm_zt(i,idx) << "\n";
             }
             amrex::Print() << p_int(i,0) << ' ' << rrho_i(i,0) << ' ' << zi_grid(i,0) << "\n";
-            exit(0);
+            //exit(0);
             */
         } // operator
 

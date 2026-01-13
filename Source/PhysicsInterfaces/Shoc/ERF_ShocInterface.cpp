@@ -409,7 +409,6 @@ void
 SHOCInterface::shocdata_to_kokkos_buffers ()
 {
     m_shoc.init_from_ascii();
-    //m_shoc.print_state();
 
     //
     // Expose for device capture
@@ -495,7 +494,7 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
                 surf_sens_flux_d(icol)   = m_shoc.hfx_s;
                 surf_evap_d(icol)        = m_shoc.qfx_s/m_shoc.latvap;
                 // Back out the drag coeff
-                surf_drag_coeff_tms_d(icol) = m_shoc.drag_coeff_s;
+                surf_drag_coeff_tms_d(icol) = 0.;//m_shoc.drag_coeff_s; // HACK HACK HACK
 
                 // Kinematic fluxes
                 wpthlp_sfc(icol) = m_shoc.wthl_s;
@@ -503,10 +502,8 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
                 upwp_sfc(icol)   = m_shoc.t13_s;
                 vpwp_sfc(icol)   = m_shoc.t23_s;
             }
-            T_mid_d(icol,ilay)          = m_shoc.tmid[k];
-            qv_d(icol,ilay)             = m_shoc.qv[k];
-
-            if (icol==0) Print() << std::setprecision(15) << "Tmid IC: " << ilay << ' ' << T_mid_d(icol,ilay) << "\n";
+            T_mid_d(icol,ilay) = m_shoc.tmid[k];
+            qv_d(icol,ilay)    = m_shoc.qv[k];
 
             // Input data structures
             //=======================================================
@@ -525,7 +522,9 @@ SHOCInterface::shocdata_to_kokkos_buffers ()
             // Inv exner
             inv_exner(icol,ilay) = m_shoc.inv_exner[k];
             // Thv
-            thv(icol,ilay) = m_shoc.thv[k];
+            thv(icol,ilay)  = m_shoc.thv[k];
+            // Thl
+            thlm(icol,ilay) = m_shoc.thd[k];
             // Surface geopotential
             if (k==0) {
                 phis_d(icol) = CONST_GRAV * m_shoc.zsurf;
