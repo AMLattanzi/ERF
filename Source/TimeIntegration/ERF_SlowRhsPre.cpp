@@ -847,7 +847,7 @@ void erf_slow_rhs_pre (int level, int finest_level,
             rho_w_rhs(i, j, k) += (-gpz - abl_pressure_grad[2] + buoyancy_arr(i,j,k)) / (one + q) + zmom_src_arr(i,j,k);
 
             if (l_moving_terrain) {
-                 rho_w_rhs(i, j, k) *= myhalf * (detJ_arr(i,j,k) + detJ_arr(i,j,k-1));
+                rho_w_rhs(i, j, k) *= myhalf * (detJ_arr(i,j,k) + detJ_arr(i,j,k-1));
             }
         });
 

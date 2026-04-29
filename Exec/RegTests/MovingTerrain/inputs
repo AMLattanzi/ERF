@@ -24,19 +24,19 @@ erf.terrain_type = Moving   # moving terrain
 erf.terrain_smoothing = 2   # Sullivan 2004 approach
 
 # FOR NO SUBSTEPPING
-erf.substepping_type   = None
-erf.fixed_dt           = 0.005
+#erf.substepping_type   = None
+#erf.fixed_dt           = 0.005
 
 # FOR SUBSTEPPING (fac 20)
-#erf.substepping_type   = Implicit
-#erf.fixed_mri_dt_ratio = 20
-#erf.fixed_dt           = 0.1
-#erf.use_lagged_delta_rt = false
+erf.substepping_type   = Implicit
+erf.fixed_mri_dt_ratio = 20
+erf.fixed_dt           = 0.1
+erf.use_lagged_delta_rt = false
 
 # DIAGNOSTICS & VERBOSITY
 erf.sum_interval   = -1       # timesteps between computing mass
-erf.v              =  0       # verbosity in ERF.cpp
-amr.v              =  0       # verbosity in Amr.cpp
+erf.v              =  1       # verbosity in ERF.cpp
+amr.v              =  1       # verbosity in Amr.cpp
 
 # REFINEMENT / REGRIDDING
 amr.max_level       = 0       # maximum level number allowed

@@ -198,31 +198,6 @@ void erf_substep_MT (int step, int /*nrk*/,
         const Array4<const Real>& mf_ux = mapfac[MapFacType::u_x]->const_array(mfi);
         const Array4<const Real>& mf_vy = mapfac[MapFacType::v_y]->const_array(mfi);
 
-        // *********************************************************************
-        // This must be done before we set cur_xmom and cur_ymom, since those
-        //      in fact point to the same array as prev_xmom and prev_ymom
-        // *********************************************************************
-        Box gbxo = mfi.nodaltilebox(2);
-        {
-        BL_PROFILE("fast_MT_making_omega");
-        Box gbxo_lo = gbxo; gbxo_lo.setBig(2,0);
-        ParallelFor(gbxo_lo, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-            omega_arr(i,j,k) = zero;
-        });
-        Box gbxo_hi = gbxo; gbxo_hi.setSmall(2,gbxo.bigEnd(2));
-        ParallelFor(gbxo_hi, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-            omega_arr(i,j,k) = prev_zmom(i,j,k) - stg_zmom(i,j,k) - zp_t_arr(i,j,k);
-        });
-        Box gbxo_mid = gbxo; gbxo_mid.setSmall(2,1); gbxo_mid.setBig(2,gbxo.bigEnd(2)-1);
-        ParallelFor(gbxo_mid, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
-            omega_arr(i,j,k) =
-                ( OmegaFromW(i,j,k,prev_zmom(i,j,k),prev_xmom,prev_ymom,mf_ux,mf_vy,z_nd_old,dxInv)
-                 -OmegaFromW(i,j,k, stg_zmom(i,j,k), stg_xmom, stg_ymom,mf_ux,mf_vy,z_nd_old,dxInv) )
-                - zp_t_arr(i,j,k);
-        });
-        } // end profile
-        // *********************************************************************
-
         const Array4<const Real>& pi_stage_ca = pi_stage.const_array(mfi);
 
         const Array4<Real>& theta_extrap = extrap.array(mfi);
@@ -233,6 +208,34 @@ void erf_substep_MT (int step, int /*nrk*/,
         Box gtbx  = mfi.nodaltilebox(0); gtbx.grow(1); gtbx.setSmall(2,0);
         Box gtby  = mfi.nodaltilebox(1); gtby.grow(1); gtby.setSmall(2,0);
 
+        // *********************************************************************
+        // Define the old Omega - Z"_t
+        // This must be done before we set cur_xmom and cur_ymom, since those
+        // in fact point to the same array as prev_xmom and prev_ymom
+        // *********************************************************************
+        Box gbxo = mfi.nodaltilebox(2);
+        {
+        BL_PROFILE("fast_MT_making_omega");
+        Box gbxo_lo = gbxo; gbxo_lo.setBig(2,0);
+        ParallelFor(gbxo_lo, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
+            omega_arr(i,j,k) = zp_t_arr(i,j,k) - zp_t_arr(i,j,k)/beta_1;
+        });
+        Box gbxo_hi = gbxo; gbxo_hi.setSmall(2,gbxo.bigEnd(2));
+        ParallelFor(gbxo_hi, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
+            omega_arr(i,j,k) = prev_zmom(i,j,k) - stg_zmom(i,j,k);
+        });
+        Box gbxo_mid = gbxo; gbxo_mid.setSmall(2,1); gbxo_mid.setBig(2,gbxo.bigEnd(2)-1);
+        ParallelFor(gbxo_mid, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
+            omega_arr(i,j,k) =
+                    ( OmegaFromW(i,j,k,prev_zmom(i,j,k),prev_xmom,prev_ymom,mf_ux,mf_vy,z_nd_old,dxInv)
+                    - OmegaFromW(i,j,k, stg_zmom(i,j,k), stg_xmom, stg_ymom,mf_ux,mf_vy,z_nd_old,dxInv) )
+                    - zp_t_arr(i,j,k)/beta_1;
+        });
+        } // end profile
+
+        // *********************************************************************
+        // Theta extrapolation
+        // *********************************************************************
         if (step == 0) {
             ParallelFor(gbx,
             [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept {
@@ -314,7 +317,7 @@ void erf_substep_MT (int step, int /*nrk*/,
                 Real pi_c =  myhalf * (pi_stage_ca(i-1,j,k) + pi_stage_ca(i  ,j,k));
                 Real fast_rhs_rho_u = -Gamma * R_d * pi_c * gpx / (one + q);
 
-                // We have already scaled the source terms to have the extra factor of dJ
+                // NOTE: This is (JU)^{+}
                 cur_xmom(i,j,k) = h_zeta_old * prev_xmom(i,j,k) + dtau * fast_rhs_rho_u
                                                                 + dtau * slow_rhs_rho_u(i,j,k)
                                                                 + dtau * xmom_src_arr(i,j,k);
@@ -338,7 +341,7 @@ void erf_substep_MT (int step, int /*nrk*/,
                 Real pi_c =  myhalf * (pi_stage_ca(i,j-1,k) + pi_stage_ca(i,j  ,k));
                 Real fast_rhs_rho_v = -Gamma * R_d * pi_c * gpy / (one + q);
 
-                // We have already scaled the source terms to have the extra factor of dJ
+                // NOTE: This is (JV)^{+}
                 cur_ymom(i, j, k) = h_zeta_old * prev_ymom(i,j,k) + dtau * fast_rhs_rho_v
                                                                   + dtau * slow_rhs_rho_v(i,j,k)
                                                                   + dtau * ymom_src_arr(i,j,k);
@@ -355,7 +358,9 @@ void erf_substep_MT (int step, int /*nrk*/,
         const GpuArray<const Array4<Real>, AMREX_SPACEDIM>
             flx_arr{{AMREX_D_DECL(flux[0].array(), flux[1].array(), flux[2].array())}};
 
-        // *********************************************************************
+        // *************************************************************************
+        // Temporary RHS from undated lateral momenta
+        // *************************************************************************
         {
         BL_PROFILE("fast_T_making_rho_rhs");
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
@@ -370,7 +375,7 @@ void erf_substep_MT (int step, int /*nrk*/,
             Real yflux_lo = cur_ymom(i,j  ,k) - stg_ymom(i,j  ,k)*h_zeta_stg_ylo;
             Real yflux_hi = cur_ymom(i,j+1,k) - stg_ymom(i,j+1,k)*h_zeta_stg_yhi;
 
-            // NOTE: we are saving the (1/J) weighting for later when we add this to rho and theta
+            // NOTE: No 1/J factor on the divergence terms (multiplied through from LHS)
             temp_rhs_arr(i,j,k,0) = ( xflux_hi - xflux_lo ) * dxi + ( yflux_hi - yflux_lo ) * dyi;
             temp_rhs_arr(i,j,k,1) = (( xflux_hi * (prim(i,j,k,0) + prim(i+1,j,k,0)) -
                                        xflux_lo * (prim(i,j,k,0) + prim(i-1,j,k,0)) ) * dxi +
@@ -396,6 +401,10 @@ void erf_substep_MT (int step, int /*nrk*/,
         });
         } // end profile
 
+
+        // *************************************************************************
+        // Convert cur_mom from (JU)^{+} to U^{+} and accumulate avg_mom
+        // *************************************************************************
         ParallelFor(tbx, tby,
         [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
@@ -421,14 +430,23 @@ void erf_substep_MT (int step, int /*nrk*/,
         // We define halfg to match the notes (which is why we take the absolute value)
         Real halfg = std::abs(myhalf * grav_gpu[2]);
 
+        // *************************************************************************
+        // Set up the tridiagonal RHS
+        // *************************************************************************
         {
         BL_PROFILE("fast_loop_on_shrunk_t");
         //Note we don't act on the bottom or top boundaries of the domain
         ParallelFor(bx_shrunk_in_k, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            Real     dJ_old_kface = 0.5 * (detJ_old(i,j,k) + detJ_old(i,j,k-1));
-            Real     dJ_new_kface = 0.5 * (detJ_new(i,j,k) + detJ_new(i,j,k-1));
-            Real     dJ_stg_kface = 0.5 * (detJ_stg(i,j,k) + detJ_stg(i,j,k-1));
+            Real dJ_old_kface = 0.5 * (detJ_old(i,j,k) + detJ_old(i,j,k-1));
+            Real dJ_new_kface = 0.5 * (detJ_new(i,j,k) + detJ_new(i,j,k-1));
+
+            Real dJ_rat_old_kface = dJ_old_kface / dJ_new_kface;
+
+            Real dJ_rat_stg_k     = detJ_stg(i,j,k  ) / detJ_new(i,j,k  );
+            Real dJ_rat_stg_km1   = detJ_stg(i,j,k-1) / detJ_new(i,j,k-1);
+            Real dJ_rat_old_k     = detJ_old(i,j,k  ) / detJ_new(i,j,k  );
+            Real dJ_rat_old_km1   = detJ_old(i,j,k-1) / detJ_new(i,j,k-1);
 
             Real coeff_P = coeffP_a(i,j,k);
             Real coeff_Q = coeffQ_a(i,j,k);
@@ -437,68 +455,82 @@ void erf_substep_MT (int step, int /*nrk*/,
             Real theta_t_mid = myhalf * ( prim(i,j,k-1,PrimTheta_comp) + prim(i,j,k  ,PrimTheta_comp) );
             Real theta_t_hi  = myhalf * ( prim(i,j,k  ,PrimTheta_comp) + prim(i,j,k+1,PrimTheta_comp) );
 
-            // line 2 last two terms (order dtau)
-            Real R0_tmp  = coeff_P * cur_cons(i,j,k  ,RhoTheta_comp)
-                         + coeff_Q * cur_cons(i,j,k-1,RhoTheta_comp)
-                         - coeff_P * stg_cons(i,j,k  ,RhoTheta_comp) * (dJ_stg_kface/dJ_old_kface)
-                         - coeff_Q * stg_cons(i,j,k-1,RhoTheta_comp) * (dJ_stg_kface/dJ_old_kface)
-                       - halfg   * ( cur_cons(i,j,k,Rho_comp) + cur_cons(i,j,k-1,Rho_comp) )
-                       + halfg   * ( stg_cons(i,j,k,Rho_comp) + stg_cons(i,j,k-1,Rho_comp) ) * (dJ_stg_kface/dJ_old_kface);
+            // lines 6-7 (order dtau)
+            Real Thpp_k   = cur_cons(i,j,k  ,RhoTheta_comp) - stg_cons(i,j,k  ,RhoTheta_comp);
+            Real Thpp_km1 = cur_cons(i,j,k-1,RhoTheta_comp) - stg_cons(i,j,k-1,RhoTheta_comp);
+            Real Rpp_k    = cur_cons(i,j,k  ,Rho_comp     ) - stg_cons(i,j,k  ,Rho_comp     );
+            Real Rpp_km1  = cur_cons(i,j,k-1,Rho_comp     ) - stg_cons(i,j,k-1,Rho_comp     );
+            Real R0_tmp   = beta_1 * ( coeff_P * Thpp_k                + coeff_Q * Thpp_km1                   )
+                          + beta_2 * ( coeff_P * Thpp_k * dJ_rat_old_k + coeff_Q * Thpp_km1 * dJ_rat_old_km1 )
+                          - beta_1 * halfg * ( Rpp_k                + Rpp_km1                 )
+                          - beta_2 * halfg * ( Rpp_k * dJ_rat_old_k + Rpp_km1 * dJ_rat_old_km1);
 
-            // line 3 residuals (order dtau^2) one <-> beta_2
-            Real R1_tmp = - halfg * ( slow_rhs_cons(i,j,k  ,Rho_comp) + slow_rhs_cons(i,j,k-1,Rho_comp))
-                          + coeff_P * slow_rhs_cons(i,j,k  ,RhoTheta_comp) + coeff_Q * slow_rhs_cons(i,j,k-1,RhoTheta_comp);
+
+            // lines 3-4 (order dtau)
+            Real DeltaJ_rat_k   = (detJ_old(i,j,k  ) - detJ_new(i,j,k  )) / detJ_new(i,j,k  );
+            Real DeltaJ_rat_km1 = (detJ_old(i,j,k-1) - detJ_new(i,j,k-1)) / detJ_new(i,j,k-1);
+            R0_tmp += beta_2 * (  -halfg * (DeltaJ_rat_k * stg_cons(i,j,k,Rho_comp)      +           DeltaJ_rat_km1 * stg_cons(i,j,k-1,Rho_comp) )
+                               + coeff_P *  DeltaJ_rat_k * stg_cons(i,j,k,RhoTheta_comp) + coeff_Q * DeltaJ_rat_km1 * stg_cons(i,j,k-1,RhoTheta_comp) );
+
+
+            // line 7 residuals (order dtau^2) one <-> beta_2
+            Real R1_tmp = - halfg * ( slow_rhs_cons(i,j,k  ,Rho_comp) * dJ_rat_stg_k + slow_rhs_cons(i,j,k-1,Rho_comp) * dJ_rat_stg_km1 )
+                          + coeff_P * slow_rhs_cons(i,j,k  ,RhoTheta_comp) * dJ_rat_stg_k
+                          + coeff_Q * slow_rhs_cons(i,j,k-1,RhoTheta_comp) * dJ_rat_stg_km1;
 
             Real Omega_kp1 = omega_arr(i,j,k+1);
             Real Omega_k   = omega_arr(i,j,k  );
             Real Omega_km1 = omega_arr(i,j,k-1);
 
-            Real detJdiff = (detJ_old(i,j,k) - detJ_old(i,j,k-1)) / (detJ_old(i,j,k)*detJ_old(i,j,k-1));
+            Real detJdiff = (detJ_new(i,j,k) - detJ_new(i,j,k-1)) / (detJ_new(i,j,k)*detJ_new(i,j,k-1));
 
-            // consolidate lines 4&5 (order dtau^2)
-            R1_tmp += halfg * ( beta_1 * dzi * (Omega_kp1/detJ_old(i,j,k) + detJdiff*Omega_k - Omega_km1/detJ_old(i,j,k-1))
-                                + temp_rhs_arr(i,j,k,Rho_comp)/detJ_old(i,j,k) + temp_rhs_arr(i,j,k-1,Rho_comp)/detJ_old(i,j,k-1) );
+            // consolidate lines 8-9 (order dtau^2)
+            R1_tmp += halfg * ( beta_1 * dzi * (Omega_kp1/detJ_new(i,j,k) + detJdiff*Omega_k - Omega_km1/detJ_new(i,j,k-1))
+                              + temp_rhs_arr(i,j,k,Rho_comp)/detJ_new(i,j,k) + temp_rhs_arr(i,j,k-1,Rho_comp)/detJ_new(i,j,k-1) );
 
-            // consolidate lines 6&7 (order dtau^2)
+            // consolidate lines 10-11 (order dtau^2)
             R1_tmp += -(
-                 coeff_P/detJ_old(i,j,k  ) * ( beta_1 * dzi * (Omega_kp1*theta_t_hi - Omega_k*theta_t_mid)
-                                              +temp_rhs_arr(i,j,k  ,RhoTheta_comp) ) +
-                 coeff_Q/detJ_old(i,j,k-1) * ( beta_1 * dzi * (Omega_k*theta_t_mid - Omega_km1*theta_t_lo)
-                                              +temp_rhs_arr(i,j,k-1,RhoTheta_comp) ) );
+                 coeff_P/detJ_new(i,j,k  ) * ( beta_1 * dzi * (Omega_kp1*theta_t_hi - Omega_k*theta_t_mid)
+                                             + temp_rhs_arr(i,j,k  ,RhoTheta_comp) ) +
+                 coeff_Q/detJ_new(i,j,k-1) * ( beta_1 * dzi * (Omega_k*theta_t_mid - Omega_km1*theta_t_lo)
+                                             + temp_rhs_arr(i,j,k-1,RhoTheta_comp) ) );
 
             // line 1
-            RHS_a(i,j,k) = prev_zmom(i,j,k) - (dJ_stg_kface/dJ_old_kface) * stg_zmom(i,j,k)
-                           + dtau * slow_rhs_rho_w(i,j,k) / dJ_stg_kface
-                           + dtau * zmom_src_arr(i,j,k);
-
-            RHS_a(i,j,k) += dtau * R0_tmp;
-
-            RHS_a(i,j,k) += dtau                * dtau*beta_2*R1_tmp;
+            Real Wpp = prev_zmom(i,j,k) - stg_zmom(i,j,k);
+            RHS_a(i,j,k) = dJ_rat_old_kface * ( Wpp + dtau * R0_tmp + dtau * dtau * beta_2 * R1_tmp )
+                         + dtau * slow_rhs_rho_w(i,j,k) / detJ_new(i,j,k)
+                         + dtau * zmom_src_arr(i,j,k)   / detJ_new(i,j,k);
 
             // We cannot use omega_arr here since that was built with old_rho_u and old_rho_v ...
-            Real UppVpp = (dJ_new_kface/dJ_old_kface) * OmegaFromW(i,j,k,0.,cur_xmom,cur_ymom,mf_ux,mf_vy,z_nd_new,dxInv)
-                         -(dJ_stg_kface/dJ_old_kface) * OmegaFromW(i,j,k,0.,stg_xmom,stg_ymom,mf_ux,mf_vy,z_nd_stg,dxInv);
+            Real UppVpp = OmegaFromW(i,j,k,0.,cur_xmom,cur_ymom,mf_ux,mf_vy,z_nd_new,dxInv)
+                        - OmegaFromW(i,j,k,0.,stg_xmom,stg_ymom,mf_ux,mf_vy,z_nd_stg,dxInv);
             RHS_a(i,j,k) += UppVpp;
+
+            // line 1 residual
+            RHS_a(i,j,k) += (dJ_old_kface - dJ_new_kface) * stg_zmom(i,j,k) / dJ_new_kface;
         });
         } // end profile
 
-        Box b2d = tbz; // Copy constructor
+        Box b2d = tbz;
         b2d.setRange(2,0);
 
         auto const lo = lbound(bx);
         auto const hi = ubound(bx);
 
+        // *************************************************************************
+        // Solve tridiagonal system
+        // *************************************************************************
         {
         BL_PROFILE("substep_b2d_loop_t");
 
 #ifdef AMREX_USE_GPU
         ParallelFor(b2d, [=] AMREX_GPU_DEVICE (int i, int j, int)
         {
-            // Moving terrain
-            Real rho_on_bdy = myhalf * ( prev_cons(i,j,lo.z) + prev_cons(i,j,lo.z-1) );
-            RHS_a(i,j,lo.z) = rho_on_bdy * zp_t_arr(i,j,lo.z);
+            // NOTE: Omega = Z_t at zeta = 0; thus Omega" = Zp_t at zeta = 0
+            //       Using zp_t_arr here leads to a discrete balance where Omega" - Zp_t = 0 at zeta = 0
+            RHS_a(i,j,lo.z)   = zp_t_arr(i,j,lo.z);
 
-            soln_a(i,j,lo.z) = RHS_a(i,j,lo.z) * inv_coeffB_a(i,j,lo.z);
+            soln_a(i,j,lo.z)  = RHS_a(i,j,lo.z) * inv_coeffB_a(i,j,lo.z);
 
             RHS_a(i,j,hi.z+1) = dtau * (slow_rhs_rho_w(i,j,hi.z+1) + zmom_src_arr(i,j,hi.z+1));
 
@@ -510,16 +542,16 @@ void erf_substep_MT (int step, int /*nrk*/,
                 soln_a(i,j,k) -= ( coeffC_a(i,j,k) * inv_coeffB_a(i,j,k) ) * soln_a(i,j,k+1);
             }
 
-           // We assume that Omega == w at the top boundary and that changes in J there are irrelevant
+            // We assume that Omega == w at the top boundary and that changes in J there are irrelevant
             cur_zmom(i,j,hi.z+1) = stg_zmom(i,j,hi.z+1) + soln_a(i,j,hi.z+1);
         });
 #else
         for (int j = lo.y; j <= hi.y; ++j) {
              AMREX_PRAGMA_SIMD
              for (int i = lo.x; i <= hi.x; ++i) {
-
-                 Real rho_on_bdy = myhalf * ( prev_cons(i,j,lo.z) + prev_cons(i,j,lo.z-1) );
-                 RHS_a(i,j,lo.z) = rho_on_bdy * zp_t_arr(i,j,lo.z);
+                 // NOTE: Omega = Z_t at zeta = 0; thus Omega" = Zp_t at zeta = 0
+                 //       Using zp_t_arr here leads to a discrete balance where Omega" - Zp_t = 0 at zeta = 0
+                 RHS_a(i,j,lo.z)  = zp_t_arr(i,j,lo.z);
 
                  soln_a(i,j,lo.z) = RHS_a(i,j,lo.z) * inv_coeffB_a(i,j,lo.z);
              }
@@ -558,34 +590,23 @@ void erf_substep_MT (int step, int /*nrk*/,
 #endif
         } // end profile
 
+        // *************************************************************************
+        // Subtract off Z"_t from solution for Omega
+        // *************************************************************************
         {
         BL_PROFILE("substep_new_drhow");
         tbz.setBig(2,hi.z);
         ParallelFor(tbz, [=] AMREX_GPU_DEVICE (int i, int j, int k)
         {
-            Real rho_on_face = myhalf * (cur_cons(i,j,k,Rho_comp) + cur_cons(i,j,k-1,Rho_comp));
-
             if (k == lo.z) {
-                cur_zmom(i,j,k) = WFromOmega(i,j,k,rho_on_face*(z_t_arr(i,j,k)+zp_t_arr(i,j,k)),
-                                             cur_xmom,cur_ymom,mf_ux,mf_vy,z_nd_new,dxInv);
-
-                // We need to set this here because it is used to define zflux_lo below
-                soln_a(i,j,k) = zero;
-
+                Real rho_stg_kface = myhalf * (stg_cons(i,j,k,0) + stg_cons(i,j,k-1,0));
+                Real Zt_cur        = zp_t_arr(i,j,k) + rho_stg_kface * z_t_arr(i,j,k);
+                cur_zmom(i,j,k) = WFromOmega(i,j,k,Zt_cur,cur_xmom,cur_ymom,mf_ux,mf_vy,z_nd_new,dxInv);
             } else {
-
                 Real UppVpp = WFromOmega(i,j,k,zero,cur_xmom,cur_ymom,mf_ux,mf_vy,z_nd_new,dxInv)
                             - WFromOmega(i,j,k,zero,stg_xmom,stg_ymom,mf_ux,mf_vy,z_nd_stg,dxInv);
                 Real wpp = soln_a(i,j,k) + UppVpp;
-                Real dJ_old_kface = myhalf * (detJ_old(i,j,k) + detJ_old(i,j,k-1));
-                Real dJ_new_kface = myhalf * (detJ_new(i,j,k) + detJ_new(i,j,k-1));
-
-                cur_zmom(i,j,k) = dJ_old_kface * (stg_zmom(i,j,k) + wpp);
-                cur_zmom(i,j,k) /= dJ_new_kface;
-
-                soln_a(i,j,k) = OmegaFromW(i,j,k,cur_zmom(i,j,k),cur_xmom,cur_ymom,mf_ux,mf_vy,z_nd_new,dxInv)
-                              - OmegaFromW(i,j,k,stg_zmom(i,j,k),stg_xmom,stg_ymom,mf_ux,mf_vy,z_nd_stg,dxInv);
-                soln_a(i,j,k) -= rho_on_face * zp_t_arr(i,j,k);
+                cur_zmom(i,j,k) = stg_zmom(i,j,k) + wpp;
             }
 
             if (l_rayleigh_impl_for_w && k > 0) {
@@ -596,51 +617,56 @@ void erf_substep_MT (int step, int /*nrk*/,
         } // end profile
 
         // **************************************************************************
-        // Define updates in the RHS of rho and (rho theta)
+        // Complete update for rho and (rho theta)
         // **************************************************************************
         {
         BL_PROFILE("fast_rho_final_update");
         ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
-              Real zflux_lo = beta_2 * soln_a(i,j,k  ) + beta_1 * omega_arr(i,j,k);
-              Real zflux_hi = beta_2 * soln_a(i,j,k+1) + beta_1 * omega_arr(i,j,k+1);
+            // NOTE: zp_t has already been included in omega_arr
+            Real zflux_lo = beta_2 * soln_a(i,j,k  ) + beta_1 * omega_arr(i,j,k);
+            Real zflux_hi = beta_2 * soln_a(i,j,k+1) + beta_1 * omega_arr(i,j,k+1);
 
-              // Note that in the solve we effectively impose new_drho_w(i,j,vbx_hi.z+1)=0
-              // so we don't update avg_zmom at k=vbx_hi.z+1
-              avg_zmom_arr(i,j,k)      += facinv*zflux_lo / (mf_mx(i,j,0) * mf_my(i,j,0));
-              if (l_reflux) {
-                  (flx_arr[2])(i,j,k,0) =        zflux_lo / (mf_mx(i,j,0) * mf_my(i,j,0));
-              }
+            // Note that in the solve we effectively impose new_drho_w(i,j,vbx_hi.z+1)=0
+            // so we don't update avg_zmom at k=vbx_hi.z+1
+            avg_zmom_arr(i,j,k)      += facinv*zflux_lo / (mf_mx(i,j,0) * mf_my(i,j,0));
+            if (l_reflux) {
+                (flx_arr[2])(i,j,k,0) =        zflux_lo / (mf_mx(i,j,0) * mf_my(i,j,0));
+            }
 
-              // Note that the factor of (1/J) in the fast source term is canceled
-              // when we multiply old and new by detJ_old and detJ_new , respectively
-              // We have already scaled the slow source term to have the extra factor of dJ
-              Real fast_rhs_rho = -(temp_rhs_arr(i,j,k,0) + ( zflux_hi - zflux_lo ) * dzi);
-              Real fast_rhs_rhotheta = -( temp_rhs_arr(i,j,k,1) + myhalf *
-                                        ( zflux_hi * (prim(i,j,k) + prim(i,j,k+1))
-                                        - zflux_lo * (prim(i,j,k) + prim(i,j,k-1)) ) * dzi );
+            // Note that the factor of (1/J) in the fast source term is canceled
+            // when we multiply old and new by detJ_old and detJ_new , respectively
+            // We have already scaled the slow source term to have the extra factor of dJ
+            Real fast_rhs_rho = -(temp_rhs_arr(i,j,k,0) + ( zflux_hi - zflux_lo ) * dzi);
+            Real fast_rhs_rhotheta = -( temp_rhs_arr(i,j,k,1) + myhalf *
+                                      ( zflux_hi * (prim(i,j,k) + prim(i,j,k+1))
+                                      - zflux_lo * (prim(i,j,k) + prim(i,j,k-1)) ) * dzi );
 
-              cur_cons(i,j,k,0) *= (detJ_old(i,j,k)/detJ_new(i,j,k));
-              cur_cons(i,j,k,1) *= (detJ_old(i,j,k)/detJ_new(i,j,k));
+            // NOTE: Update (J\phi)^{+} and convert to (\phi)^{+}
+            cur_cons(i,j,k,Rho_comp     ) = detJ_old(i,j,k) * prev_cons(i,j,k,Rho_comp)
+                                          + dtau * fast_rhs_rho
+                                          + dtau * detJ_stg(i,j,k) * slow_rhs_cons(i,j,k,Rho_comp);
+            cur_cons(i,j,k,RhoTheta_comp) = detJ_old(i,j,k) * prev_cons(i,j,k,RhoTheta_comp)
+                                          + dtau * fast_rhs_rhotheta
+                                          + dtau * detJ_stg(i,j,k) * slow_rhs_cons(i,j,k,RhoTheta_comp);
+            cur_cons(i,j,k,Rho_comp)      /= detJ_new(i,j,k);
+            cur_cons(i,j,k,RhoTheta_comp) /= detJ_new(i,j,k);
 
-              cur_cons(i,j,k,0) += dtau * ( slow_rhs_cons(i,j,k,0) + fast_rhs_rho      / detJ_new(i,j,k));
-              cur_cons(i,j,k,1) += dtau * ( slow_rhs_cons(i,j,k,1) + fast_rhs_rhotheta / detJ_new(i,j,k));
+            if (l_reflux) {
+                (flx_arr[2])(i,j,k,1) = (flx_arr[2])(i,j,k,0) * myhalf * (prim(i,j,k) + prim(i,j,k-1));
+            }
 
-              if (l_reflux) {
-                  (flx_arr[2])(i,j,k,1) = (flx_arr[2])(i,j,k,0) * myhalf * (prim(i,j,k) + prim(i,j,k-1));
-              }
+            if (k == vbx_hi.z) {
+                avg_zmom_arr(i,j,k+1)      += facinv * zflux_hi / (mf_mx(i,j,0) * mf_my(i,j,0));
+                if (l_reflux) {
+                    (flx_arr[2])(i,j,k+1,0) =          zflux_hi / (mf_mx(i,j,0) * mf_my(i,j,0));
+                    (flx_arr[2])(i,j,k+1,1) = (flx_arr[2])(i,j,k+1,0) * myhalf * (prim(i,j,k) + prim(i,j,k+1));
+                }
+            }
 
-              if (k == vbx_hi.z) {
-                  avg_zmom_arr(i,j,k+1)      += facinv * zflux_hi / (mf_mx(i,j,0) * mf_my(i,j,0));
-                  if (l_reflux) {
-                      (flx_arr[2])(i,j,k+1,0) =          zflux_hi / (mf_mx(i,j,0) * mf_my(i,j,0));
-                      (flx_arr[2])(i,j,k+1,1) = (flx_arr[2])(i,j,k+1,0) * myhalf * (prim(i,j,k) + prim(i,j,k+1));
-                  }
-              }
-
-              // add in source terms for cell-centered conserved variables
-              cur_cons(i,j,k,Rho_comp)      += dtau * cc_src_arr(i,j,k,Rho_comp);
-              cur_cons(i,j,k,RhoTheta_comp) += dtau * cc_src_arr(i,j,k,RhoTheta_comp);
+            // add in source terms for cell-centered conserved variables
+            cur_cons(i,j,k,Rho_comp)      += dtau * cc_src_arr(i,j,k,Rho_comp);
+            cur_cons(i,j,k,RhoTheta_comp) += dtau * cc_src_arr(i,j,k,RhoTheta_comp);
         });
         } // end profile
 

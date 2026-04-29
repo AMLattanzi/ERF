@@ -112,8 +112,9 @@ auto acoustic_substepping_fun = [&](int fast_step, int n_sub, int nrk,
         std::unique_ptr<MultiFab> z_t_pert;
         if ( solverChoice.terrain_type == TerrainType::MovingFittedMesh )
         {
+            Vector<MultiFab>& S_data_to_use = (fast_step==0) ? S_stage : S_data;
             z_t_pert = std::make_unique<MultiFab>(S_data[IntVars::zmom].boxArray(), S_data[IntVars::zmom].DistributionMap(), 1, 1);
-            update_terrain_substep(level, old_substep_time, new_substep_time, dtau, S_data, z_t_pert);
+            update_terrain_substep(level, old_substep_time, new_substep_time, dtau, S_stage, Svec_to_use, z_t_pert);
         }
 
         bool l_use_moisture = ( solverChoice.moisture_type != MoistureType::None );
@@ -121,8 +122,10 @@ auto acoustic_substepping_fun = [&](int fast_step, int n_sub, int nrk,
         if ( (fast_step == 0) || (solverChoice.terrain_type == TerrainType::MovingFittedMesh) )
         {
             make_fast_coeffs(level, fast_coeffs, S_stage, S_prim, pi_stage, fine_geom,
-                             l_use_moisture, SolverChoice::mesh_type, solverChoice.gravity, solverChoice.c_p,
-                             detJ_cc[level], r0, pi0, dtau, beta_s, phys_bc_type);
+                             l_use_moisture, SolverChoice::mesh_type, SolverChoice::terrain_type,
+                             solverChoice.gravity, solverChoice.c_p,
+                             detJ_cc[level].get(), detJ_cc_new[level].get(),
+                             r0, pi0, dtau, beta_s, phys_bc_type);
         }
 
         bool l_rayleigh_implicit = (solverChoice.dampingChoice.rayleigh_damping_type == RayleighDampingType::FastImplicit);
