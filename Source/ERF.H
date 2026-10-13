@@ -481,6 +481,7 @@ public:
     void sum_integrated_quantities (double time);
     void sum_derived_quantities (double time);
     void sum_energy_quantities (double time);
+    void sum_acoustic_energy (double time);
 
     void write_1D_profiles (double time);
     void write_1D_profiles_stag (double time);
@@ -2243,6 +2244,19 @@ private:
         amrex::ParallelDescriptor::Barrier("ERF::setRecordEnergyDataInfo");
     }
 
+    void setRecordAcousticDataInfo (const std::string& filename) // NOLINT
+    {
+        if (amrex::ParallelDescriptor::IOProcessor())
+        {
+            acoustic_datalog = std::make_unique<std::fstream>();
+            acoustic_datalog->open(filename.c_str(),std::ios::out|std::ios::app);
+            if (!acoustic_datalog->good()) {
+                amrex::FileOpenFailed(filename);
+            }
+        }
+        amrex::ParallelDescriptor::Barrier("ERF::setRecordAcousticDataInfo");
+    }
+
     void setRecordSamplePointInfo (int i, int lev, amrex::IntVect& cell, const std::string& filename) // NOLINT
     {
         amrex::MultiFab dummy(grids[lev],dmap[lev],1,0);
@@ -2306,6 +2320,12 @@ private:
     amrex::Vector<std::string>       datalogname;
     amrex::Vector<std::string>   der_datalogname;
     amrex::Vector<std::string> tot_e_datalogname;
+
+    // Volume-integrated acoustic energy; u' is measured relative to acoustic_ref_vel
+    bool do_acoustic_datalog = false;
+    std::unique_ptr<std::fstream> acoustic_datalog;
+    std::string acoustic_datalogname;
+    amrex::GpuArray<amrex::Real,AMREX_SPACEDIM> acoustic_ref_vel{{amrex::Real(0),amrex::Real(0),amrex::Real(0)}};
 
     amrex::Vector<std::unique_ptr<std::fstream> > sampleptlog;
     amrex::Vector<std::string> sampleptlogname;

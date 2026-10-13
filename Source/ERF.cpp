@@ -726,6 +726,7 @@ ERF::post_timestep (int nstep, double time, double dt_lev0)
         sum_integrated_quantities(time);
         sum_derived_quantities(time);
         sum_energy_quantities(time);
+        sum_acoustic_energy(time);
     }
 
     if (solverChoice.any_perturbation()) {
@@ -2188,6 +2189,15 @@ ERF::InitData_post ()
         }
     }
 
+    if (pp.query("acoustic_energy_data_log", acoustic_datalogname))
+    {
+        do_acoustic_datalog = true;
+        setRecordAcousticDataInfo(acoustic_datalogname);
+        Vector<Real> ref_vel(AMREX_SPACEDIM, zero);
+        pp.queryarr("acoustic_energy_ref_vel", ref_vel, 0, AMREX_SPACEDIM);
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) { acoustic_ref_vel[d] = ref_vel[d]; }
+    }
+
     if (solverChoice.rad_uses_interface())
     {
         // Create data log for radiation model if requested
@@ -2318,6 +2328,7 @@ ERF::InitData_post ()
         sum_integrated_quantities(t_new[0]);
         sum_derived_quantities(t_new[0]);
         sum_energy_quantities(t_new[0]);
+        sum_acoustic_energy(t_new[0]);
     }
 
     // Create object to do line and plane sampling if needed
