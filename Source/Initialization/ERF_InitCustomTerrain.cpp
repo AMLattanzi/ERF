@@ -273,6 +273,26 @@ init_my_custom_terrain ( const Geometry& geom,
                 }
             });
 
+        } else if (custom_terrain_type == "Spline") {
+
+            // Linear spline (triangular ridge) in the x-direction:
+            //   z = z_offset + s_x * (a - |x|)  for |x| < a,  z_offset otherwise
+            // so the peak height is s_x * a at the domain center
+            Real a_spl    = Real(1000.0); pp_prob.queryAdd("a"       , a_spl);
+            Real s_x      = Real(0.1);    pp_prob.queryAdd("s_x"     , s_x);
+            Real z_offset = zero;         pp_prob.queryAdd("z_offset", z_offset);
+
+            ParallelFor(zbx, [=] AMREX_GPU_DEVICE (int i, int j, int)
+            {
+                // Clip indices for ghost-cells
+                int ii = amrex::min(amrex::max(i,domlo_x),domhi_x);
+
+                // Location of nodes
+                Real x = (ProbLoArr[0] + ii * dx[0] - xcen) * mf_m;
+
+                z_arr(i,j,k0) = z_offset + s_x * amrex::max(a_spl - std::abs(x), zero);
+            });
+
         } else if (custom_terrain_type == "None") {
             ParallelFor(zbx, [=] AMREX_GPU_DEVICE (int i, int j, int)
             {
