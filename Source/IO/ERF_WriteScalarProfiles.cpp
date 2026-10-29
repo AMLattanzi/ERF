@@ -503,6 +503,110 @@ ERF::sum_energy_quantities (double time)
 #endif
 }
 
+/**
+ * Computes the volume integral of the linear acoustic energy density
+ *
+ *    e_a = p'^2 / (2 rho_0 c_0^2) + (1/2) rho_0 |u'|^2
+ *
+ * where p' = p - p_0 and rho_0, p_0 are the hydrostatic base state,
+ * c_0^2 = gamma p_0 / rho_0, and u' = u - acoustic_ref_vel. Writes
+ * time, the potential (pressure) part, the kinetic part and their sum
+ * to the file given by erf.acoustic_energy_data_log.
+ *
+ * @param time Current time
+ */
+void
+ERF::sum_acoustic_energy (double time)
+{
+    if (!do_acoustic_datalog) { return; }
+
+    BL_PROFILE("ERF::sum_acoustic_energy()");
+
+    const MoistureComponentIndices moist_idx = solverChoice.moisture_indices;
+    const auto ref_vel = acoustic_ref_vel;
+
+    Real ea_pot = zero;
+    Real ea_kin = zero;
+
+    for (int lev = 0; lev <= finest_level; lev++)
+    {
+        MultiFab mf_cc_vel(grids[lev], dmap[lev], AMREX_SPACEDIM, 0);
+        average_face_to_cellcenter(mf_cc_vel,0,
+                                   Array<const MultiFab*,3>{&vars_new[lev][Vars::xvel],
+                                                            &vars_new[lev][Vars::yvel],
+                                                            &vars_new[lev][Vars::zvel]});
+
+        MultiFab ea(grids[lev], dmap[lev], 2, 0);
+
+#ifdef _OPENMP
+#pragma omp parallel if (amrex::Gpu::notInLaunchRegion())
+#endif
+        for (MFIter mfi(ea, TilingIfNotGPU()); mfi.isValid(); ++mfi)
+        {
+            const Box& bx = mfi.tilebox();
+
+            const Array4<Real>&       ea_arr     = ea.array(mfi);
+            const Array4<const Real>& cc_vel_arr = mf_cc_vel.const_array(mfi);
+            const Array4<const Real>& cons_arr   = vars_new[lev][Vars::cons].const_array(mfi);
+            const Array4<const Real>& base_arr   = base_state[lev].const_array(mfi);
+
+            ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+            {
+                Real qv    = (moist_idx.qv >= 0) ? cons_arr(i,j,k,moist_idx.qv)/cons_arr(i,j,k,Rho_comp) : zero;
+                Real p     = getPgivenRTh(cons_arr(i,j,k,RhoTheta_comp), qv);
+                Real r0    = base_arr(i,j,k,BaseState::r0_comp);
+                Real p0    = base_arr(i,j,k,BaseState::p0_comp);
+                Real c0sq  = Gamma * p0 / r0;
+                Real pp    = p - p0;
+                Real up    = cc_vel_arr(i,j,k,0) - ref_vel[0];
+                Real vp    = cc_vel_arr(i,j,k,1) - ref_vel[1];
+                Real wp    = cc_vel_arr(i,j,k,2) - ref_vel[2];
+
+                ea_arr(i,j,k,0) = myhalf * pp * pp / (r0 * c0sq);
+                ea_arr(i,j,k,1) = myhalf * r0 * (up*up + vp*vp + wp*wp);
+            });
+        }
+
+        auto& mfx = *mapfac[lev][MapFacType::m_x];
+        auto& mfy = *mapfac[lev][MapFacType::m_y];
+        auto&  dJ = *detJ_cc[lev];
+        ea_pot += volWgtSumMF(lev, ea, 0, dJ, mfx, mfy, true, true);
+        ea_kin += volWgtSumMF(lev, ea, 1, dJ, mfx, mfy, true, true);
+    }
+
+    const int nfoo = 2;
+    Real foo[nfoo] = {ea_pot,ea_kin};
+#ifdef AMREX_LAZY
+    Lazy::QueueReduction([=]() mutable {
+#endif
+    ParallelDescriptor::ReduceRealSum(
+        foo, nfoo, ParallelDescriptor::IOProcessorNumber());
+
+      if (ParallelDescriptor::IOProcessor()) {
+        ea_pot = foo[0];
+        ea_kin = foo[1];
+
+        std::ostream& data_log_acoustic = *acoustic_datalog;
+
+        if (time == double(0)) {
+            data_log_acoustic << "#" << std::setw(datwidth-1) << "time";
+            data_log_acoustic << std::setw(datwidth) << "Ea_pot";
+            data_log_acoustic << std::setw(datwidth) << "Ea_kin";
+            data_log_acoustic << std::setw(datwidth) << "Ea_tot";
+            data_log_acoustic << std::endl;
+        }
+        data_log_acoustic << std::setw(datwidth) << std::setprecision(timeprecision) << time;
+        data_log_acoustic << std::setw(datwidth) << std::setprecision(datprecision)  << ea_pot;
+        data_log_acoustic << std::setw(datwidth) << std::setprecision(datprecision)  << ea_kin;
+        data_log_acoustic << std::setw(datwidth) << std::setprecision(datprecision)  << ea_pot + ea_kin;
+        data_log_acoustic << std::endl;
+
+      } // if IOProcessor
+#ifdef AMREX_LAZY
+    });
+#endif
+}
+
 Real
 ERF::cloud_fraction (double /*time*/)
 {

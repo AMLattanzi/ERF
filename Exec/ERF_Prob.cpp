@@ -198,6 +198,10 @@ Problem::init_custom_pert (
     else if  (my_prob_name_ci == "sinusoidalmassflux") {
 #include "Prob/ERF_InitCustomPert_Bomex.H"
     }
+    else if ( (my_prob_name_ci == "acoustic energy") ||
+              (my_prob_name_ci == "acoustic energy spline") ) {
+#include "Prob/ERF_InitCustomPert_AcousticEnergy.H"
+    }
     else if (my_prob_name_ci == "bellforest") {
         // No state perturbation; uniform flow is set in init_custom_pert_vels
     }
@@ -278,6 +282,10 @@ Problem::init_custom_pert_vels (
               (my_prob_name_ci == "flow over schar mountain") ||
               (my_prob_name_ci == "bellforest") ) {
 #include "Prob/ERF_InitCustomPertVels_WitchOfAgnesi.H"
+    }
+    else if ( (my_prob_name_ci == "acoustic energy") ||
+              (my_prob_name_ci == "acoustic energy spline") ) {
+#include "Prob/ERF_InitCustomPertVels_AcousticEnergy.H"
     }
     else if (my_prob_name_ci == "moving terrain") {
 #include "Prob/ERF_InitCustomPertVels_MovingTerrain.H"

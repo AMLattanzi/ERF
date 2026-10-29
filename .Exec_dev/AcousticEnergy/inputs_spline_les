@@ -1,0 +1,93 @@
+# ------------------  INPUTS TO MAIN PROGRAM  -------------------
+erf.prob_name = "Acoustic Energy Spline"
+
+stop_time = 400. # 10 * L / 300
+
+amrex.fpe_trap_invalid = 0
+
+fabarray.mfiter_tile_size = 1024 1024 1024
+
+
+# PROBLEM SIZE & GEOMETRY
+geometry.prob_lo     = -640.    0.     0. 
+geometry.prob_hi     =  640.   40.  2000. 
+amr.n_cell           =  128     4    200
+
+geometry.is_periodic = 1 1 0
+
+erf.initial_dz = 1.0
+
+zlo.type = "SlipWall"
+zhi.type = "SlipWall"
+
+
+# TIME STEP CONTROL
+#erf.beta_s              = 0.05
+#erf.beta_d              = 0.05
+#erf.use_variable_beta_s = true
+erf.fixed_mri_dt_ratio  = 4
+erf.fixed_dt            = 0.05
+
+#erf.substepping_type = None
+#erf.fixed_dt = 0.0285
+
+
+# DIAGNOSTICS & VERBOSITY
+erf.sum_interval   = 1        # timesteps between computing mass
+erf.acoustic_energy_data_log = "acoustic_energy.log" # volume-integrated acoustic energy vs time
+erf.acoustic_energy_ref_vel  = 0. 0. 0.              # u' = u - ref_vel (background wind)
+erf.v              = 1        # verbosity in ERF.cpp
+amr.v              = 1        # verbosity in Amr.cpp
+
+
+# REFINEMENT / REGRIDDING
+amr.max_level       = 0       # maximum level number allowed
+
+
+# CHECKPOINT FILES
+erf.check_file      = chk     # root name of checkpoint file
+erf.check_int       = -1    # number of timesteps between checkpoints
+
+
+# PLOTFILES
+erf.plot_file_1     = plt     # prefix of plotfile name
+erf.plot_int_1      = 1000     # number of timesteps between plotfiles
+erf.plot_vars_1     = density x_velocity y_velocity z_velocity pressure theta pert_pres pert_dens
+
+
+# SOLVER CHOICE
+erf.use_gravity = false # no buoyancy: pure acoustics
+erf.use_coriolis = false
+
+erf.molec_diff_type = "None"
+erf.les_type = "None"
+
+erf.dycore_horiz_adv_type    = Upwind_3rd
+erf.dycore_vert_adv_type     = Upwind_3rd
+erf.dryscal_horiz_adv_type   = Upwind_3rd
+erf.dryscal_vert_adv_type    = Upwind_3rd
+
+
+# Without gravity the equilibrium is a uniform state (rho_0, theta_0 = T_0) at rest;
+erf.init_type = "uniform"
+
+
+# TERRRAIN GRID TYPE
+erf.terrain_type = StaticFittedMesh
+erf.terrain_smoothing = 2
+
+
+# PROBLEM PARAMETERS
+prob.custom_terrain_type = "Spline" # triangular ridge: z = s_x*(a - |x|) for |x| < a
+prob.a                   = 100.0    # half width of the ridge base [m]
+prob.s_x                 = 0.3      # slope dz/dx of the ridge flanks -> peak height s_x*a = 1200 m
+prob.T_0                 = 280.0    # uniform background theta [K] (matches sounding surface value)
+prob.p_inf               = 1.0e5    # uniform background pressure [Pa] -> rho_0 = p_inf/(R_d T_0) = 1.244
+
+
+# INITIAL ACOUSTIC PULSE (Gaussian, exp(-r^2/pert_radius^2) in x-z)
+prob.pert_p_amp  = 100.0    # p' amplitude [Pa]
+prob.pert_u_amp  = 0.24     # u' amplitude [m/s] ~ p'/(rho_0 c_0), c_0 = 335 m/s
+prob.pert_xc     = 0.0      # pulse center x [m]
+prob.pert_zc     = 1000.0   # pulse center z [m]
+prob.pert_radius = 100.0    # pulse radius [m]

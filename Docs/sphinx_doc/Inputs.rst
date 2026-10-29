@@ -1429,6 +1429,16 @@ List of Parameters
 |                                     | liquid water at the triple point, plus kinetic and       |                    |                  |
 |                                     | potential energy; ERF does not conserve it exactly       |                    |                  |
 +-------------------------------------+----------------------------------------------------------+--------------------+------------------+
+| **erf.acoustic_energy_data_log**    | Output filename for the volume integral (all levels) of  | One string         | NONE             |
+|                                     | the linear acoustic energy, p'^2/(2 rho_0 c_0^2) and     |                    |                  |
+|                                     | rho_0 |u'|^2/2, with p' = p - p_0 measured from the base |                    |                  |
+|                                     | state and c_0^2 = gamma p_0/rho_0. Columns are time,     |                    |                  |
+|                                     | Ea_pot, Ea_kin and Ea_tot, written every                 |                    |                  |
+|                                     | erf.sum_interval steps or erf.sum_period seconds         |                    |                  |
++-------------------------------------+----------------------------------------------------------+--------------------+------------------+
+| **erf.acoustic_energy_ref_vel**     | Background velocity [m/s] subtracted from u to give u'   | Three Reals        | 0 0 0            |
+|                                     | in the acoustic energy                                   |                    |                  |
++-------------------------------------+----------------------------------------------------------+--------------------+------------------+
 | **erf.profile_int**                 | Interval (number) of steps between outputs               | Integer            | -1               |
 +-------------------------------------+----------------------------------------------------------+--------------------+------------------+
 | **erf.destag_profiles**             | Interpolate all outputs to cell-center heights           | Boolean            | true             |
@@ -3731,7 +3741,15 @@ List of Parameters
 |                                  | terrain                                                  |                    |                  |
 +----------------------------------+----------------------------------------------------------+--------------------+------------------+
 | **prob.z_offset**                | vertical offset [m] applied by the ``WoA``,              | Real               | 0.0              |
-|                                  | ``RaisedFlat`` and ``Cos4Hill`` custom terrain           |                    |                  |
+|                                  | ``RaisedFlat``, ``Cos4Hill`` and ``Spline`` custom       |                    |                  |
+|                                  | terrain                                                  |                    |                  |
++----------------------------------+----------------------------------------------------------+--------------------+------------------+
+| **prob.a**                       | half width [m] of the base of the ``Spline`` custom      | Real > 0           | 1000.0           |
+|                                  | terrain, a triangular ridge in x with height             |                    |                  |
+|                                  | ``s_x*(a-|x|)`` for ``|x| < a``                          |                    |                  |
++----------------------------------+----------------------------------------------------------+--------------------+------------------+
+| **prob.s_x**                     | slope dz/dx of the flanks of the ``Spline`` custom       | Real               | 0.1              |
+|                                  | terrain; the peak height is ``s_x*a``                    |                    |                  |
 +----------------------------------+----------------------------------------------------------+--------------------+------------------+
 | **prob.Ampl**                    | amplitude [m] of the ``MovingSineWave`` custom terrain   | Real               | 0.0              |
 +----------------------------------+----------------------------------------------------------+--------------------+------------------+

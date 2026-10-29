@@ -3,6 +3,7 @@ CEXE_headers += ERF_InitCustomPert.H
 CEXE_headers += ERF_InitRayleighDamping.H
 CEXE_headers += ERF_MoistPerturbation.H
 
+CEXE_headers += ERF_InitCustomPert_AcousticEnergy.H
 CEXE_headers += ERF_InitCustomPert_Bomex.H
 CEXE_headers += ERF_InitCustomPert_SLM.H
 CEXE_headers += ERF_InitCustomPert_Bubble.H
@@ -24,6 +25,7 @@ CEXE_headers += ERF_InitCustomPert_TaylorGreenVortex.H
 CEXE_headers += ERF_InitCustomPert_TurbulentInflow.H
 CEXE_headers += ERF_InitCustomPert_UserDefined.H
 
+CEXE_headers += ERF_InitCustomPertVels_AcousticEnergy.H
 CEXE_headers += ERF_InitCustomPertVels_Bomex.H
 CEXE_headers += ERF_InitCustomPertVels_ConstantU.H
 CEXE_headers += ERF_InitCustomPertVels_CouettePoiseuille.H
