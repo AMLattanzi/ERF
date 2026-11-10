@@ -22,9 +22,9 @@ WDM6::Copy_Micro_to_State (MultiFab& cons)
         const auto& qr    = mic_fab_vars[MicVar_WDM6::qr]->array(mfi);
         const auto& qs    = mic_fab_vars[MicVar_WDM6::qs]->array(mfi);
         const auto& qg    = mic_fab_vars[MicVar_WDM6::qg]->array(mfi);
-        const auto& nn    = mic_fab_vars[MicVar_WDM6::nn]->array(mfi);
         const auto& nc    = mic_fab_vars[MicVar_WDM6::nc]->array(mfi);
         const auto& nr    = mic_fab_vars[MicVar_WDM6::nr]->array(mfi);
+        const auto& nn    = mic_fab_vars[MicVar_WDM6::nn]->array(mfi);
 
         ParallelFor(box3d, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept
         {
@@ -39,8 +39,8 @@ WDM6::Copy_Micro_to_State (MultiFab& cons)
 
             // Number concentrations
             states(i,j,k,RhoQ7_comp) = rho(i,j,k) * amrex::max(Real(0), nc(i,j,k));
-            states(i,j,k,RhoQ8_comp) = rho(i,j,k) * amrex::max(Real(0), nn(i,j,k));
-            states(i,j,k,RhoQ9_comp) = rho(i,j,k) * amrex::max(Real(0), nr(i,j,k));
+            states(i,j,k,RhoQ8_comp) = rho(i,j,k) * amrex::max(Real(0), nr(i,j,k));
+            states(i,j,k,RhoQ9_comp) = rho(i,j,k) * amrex::max(Real(0), nn(i,j,k));
         });
     }
 

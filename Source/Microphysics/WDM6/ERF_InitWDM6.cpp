@@ -64,7 +64,7 @@ WDM6::Init (const MultiFab& cons_in,
     }
 
     m_sed.define(cons_in.boxArray(), cons_in.DistributionMap(),
-                 {RhoQ3_comp, RhoQ4_comp, RhoQ5_comp, RhoQ6_comp, RhoQ9_comp});
+                 {RhoQ3_comp, RhoQ4_comp, RhoQ5_comp, RhoQ6_comp, RhoQ8_comp});
 
     // Initialize nn to ccn0 / rho (matches WRF itimestep==1 behavior)
     // This must be done here so nn is available before the first microphysics call
@@ -76,7 +76,7 @@ WDM6::Init (const MultiFab& cons_in,
     // wdm6 (:219), immediately before the kernel, not in wdm6init, so the
     // faithful ERF home is Copy_State_to_Micro, which is the per-step pack.
     // Seeding here instead was also wrong on restart: Init runs again on a
-    // restart, so it discarded the checkpoint's evolved RhoQ8 and the first
+    // restart, so it discarded the checkpoint's evolved RhoQ9 and the first
     // Copy_State_to_Micro kept the uniform background. See the state-based
     // seeding in Copy_State_to_Micro below for the condition and its rationale.
 
@@ -133,23 +133,23 @@ WDM6::Copy_State_to_Micro (const MultiFab& cons_in,
 
             // Number concentrations
             nc(i,j,k) = amrex::max(Real(0.0), states(i,j,k,RhoQ7_comp) / states(i,j,k,Rho_comp));
-            nr(i,j,k) = amrex::max(Real(0.0), states(i,j,k,RhoQ9_comp) / states(i,j,k,Rho_comp));
+            nr(i,j,k) = amrex::max(Real(0.0), states(i,j,k,RhoQ8_comp) / states(i,j,k,Rho_comp));
 
             // nn: seed the CCN reservoir where state carries nothing yet,
             // otherwise read it like every other state variable.
             //
             // This mirrors the Fortran, which does its seeding in the per-step
             // driver wdm6 (:219) rather than in wdm6init, so this is the
-            // faithful location. The Fortran gates on itimestep == 1; RhoQ8 == 0
+            // faithful location. The Fortran gates on itimestep == 1; RhoQ9 == 0
             // is equivalent for every reachable case and needs no step plumbed
             // through the Init interface. Cold start and restart from a step-0
-            // checkpoint both have RhoQ8 == 0 and seed, matching itimestep == 1;
-            // every later restart has RhoQ8 > 0 and restores. A genuine zero
+            // checkpoint both have RhoQ9 == 0 and seed, matching itimestep == 1;
+            // every later restart has RhoQ9 > 0 and restores. A genuine zero
             // cannot occur after initialization because Advance bounds nn well
             // above zero (:602). Note the Fortran block is in fact unreachable
             // from ERF: the bridge enters wdm62D directly via mp_wdm6_run and
             // skips the wdm6 wrapper, so BOTH legs take their nn from here.
-            const Real nn_state = states(i,j,k,RhoQ8_comp) / states(i,j,k,Rho_comp);
+            const Real nn_state = states(i,j,k,RhoQ9_comp) / states(i,j,k,Rho_comp);
             nn(i,j,k) = (nn_state > Real(0.0)) ? nn_state : ccn0_local;
 
             // WDM6: DO NOT enforce nc/nr minimums here!

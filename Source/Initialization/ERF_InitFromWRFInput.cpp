@@ -987,7 +987,7 @@ ERF::init_from_wrfinput (int lev, MultiFab& mf_PSFC_lev, bool read_atmos_state)
                 } else if (var_name == "QGRAUP") {
                     icomp    = solverChoice.moisture_indices.qg;
                 }
-                // Note: RhoQ7-RhoQ9 (nc, nn, nr for WDM6) or RhoQ7-RhoQ11 (nc, ni, nr, ns, ng for Morrison)
+                // Note: RhoQ7-RhoQ9 (nc, nr, nn for WDM6) or RhoQ7-RhoQ11 (nc, ni, nr, ns, ng for Morrison)
                 // start at zero and are diagnosed/initialized by the microphysics scheme
 
                 // INITIAL DATA common for "ideal" as well as "real" simulation

@@ -109,7 +109,7 @@ constexpr amrex::Real wdm6_literal (double d)
 
 // Components of WDM6's sedimentation face fluxes (m_sed), with the state they carry
 namespace WDM6Sed {
-    enum { qi = 0 /* rhoQ3 */, qr /* rhoQ4 */, qs /* rhoQ5 */, qg /* rhoQ6 */, nr /* rhoQ9 */, NumComps };
+    enum { qi = 0 /* rhoQ3 */, qr /* rhoQ4 */, qs /* rhoQ5 */, qg /* rhoQ6 */, nr /* rhoQ8 */, NumComps };
 }
 
 class WDM6 : public NullMoist {
@@ -312,7 +312,7 @@ private:
     // Sedimentation face fluxes of the most recent Advance, in the order of WDM6Sed
     SedimentationFlux m_sed;
 
-    // No nn-initialized flag: Copy_State_to_Micro decides per cell from RhoQ8,
+    // No nn-initialized flag: Copy_State_to_Micro decides per cell from RhoQ9,
     // which is restart-correct and needs no cross-call bookkeeping.
 
     // WDM6 init coefficients (hail_opt-dependent)

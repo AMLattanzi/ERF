@@ -442,17 +442,17 @@ struct MoistureComponentIndices {
         case MoistureType::Morrison:
             // Two-moment mixed phase: six mass species followed by five number
             // concentrations.
-            mi.qv          = RhoQ1_comp;
-            mi.qc          = RhoQ2_comp;
-            mi.qi          = RhoQ3_comp;
-            mi.qr          = RhoQ4_comp;
-            mi.qs          = RhoQ5_comp;
-            mi.qg          = RhoQ6_comp;
-            mi.nc          = RhoQ7_comp;
-            mi.ni          = RhoQ8_comp;
-            mi.nr          = RhoQ9_comp;
-            mi.ns          = RhoQ10_comp;
-            mi.ng          = RhoQ11_comp;
+            mi.qv            = RhoQ1_comp;
+            mi.qc            = RhoQ2_comp;
+            mi.qi            = RhoQ3_comp;
+            mi.qr            = RhoQ4_comp;
+            mi.qs            = RhoQ5_comp;
+            mi.qg            = RhoQ6_comp;
+            mi.nc            = RhoQ7_comp;
+            mi.ni            = RhoQ8_comp;
+            mi.nr            = RhoQ9_comp;
+            mi.ns            = RhoQ10_comp;
+            mi.ng            = RhoQ11_comp;
             mi.rain_accum    = 0;
             mi.snow_accum    = 1;
             mi.graupel_accum = 2;
@@ -464,9 +464,9 @@ struct MoistureComponentIndices {
             // components, but only vapor, cloud water and rain -- and the cloud
             // and rain numbers -- are integrated, so the frozen species and
             // their numbers stay absent here.
-            mi.qv         = RhoQ1_comp;
-            mi.qc         = RhoQ2_comp;
-            mi.qr         = RhoQ4_comp;
+            mi.qv           = RhoQ1_comp;
+            mi.qc           = RhoQ2_comp;
+            mi.qr           = RhoQ4_comp;
             mi.nc           = RhoQ7_comp;
             mi.nr           = RhoQ9_comp;
             mi.rain_accum   = 0;
@@ -477,15 +477,15 @@ struct MoistureComponentIndices {
             // Double-moment warm phase on top of single-moment ice: nn is the
             // aerosol reservoir and takes the slot Morrison uses for ice number,
             // and there are no snow or graupel numbers.
-            mi.qv          = RhoQ1_comp;
-            mi.qc          = RhoQ2_comp;
-            mi.qi          = RhoQ3_comp;
-            mi.qr          = RhoQ4_comp;
-            mi.qs          = RhoQ5_comp;
-            mi.qg          = RhoQ6_comp;
-            mi.nc          = RhoQ7_comp;
-            mi.nn          = RhoQ8_comp;
-            mi.nr          = RhoQ9_comp;
+            mi.qv            = RhoQ1_comp;
+            mi.qc            = RhoQ2_comp;
+            mi.qi            = RhoQ3_comp;
+            mi.qr            = RhoQ4_comp;
+            mi.qs            = RhoQ5_comp;
+            mi.qg            = RhoQ6_comp;
+            mi.nc            = RhoQ7_comp;
+            mi.nr            = RhoQ8_comp;
+            mi.nn            = RhoQ9_comp;
             mi.rain_accum    = 0;
             mi.snow_accum    = 1;
             mi.graupel_accum = 2;
@@ -497,12 +497,12 @@ struct MoistureComponentIndices {
             // species.  Its qmoist layout is its own (see the MicVarMap in
             // SuperDropletsMoist::Init): the graupel accumulation slot exists
             // but is never filled, so it stays absent.
-            mi.qv         = RhoQ1_comp;
-            mi.qc         = RhoQ2_comp;
-            mi.qi         = RhoQ3_comp;
-            mi.qr         = RhoQ4_comp;
-            mi.qs         = RhoQ5_comp;
-            mi.qg         = RhoQ6_comp;
+            mi.qv           = RhoQ1_comp;
+            mi.qc           = RhoQ2_comp;
+            mi.qi           = RhoQ3_comp;
+            mi.qr           = RhoQ4_comp;
+            mi.qs           = RhoQ5_comp;
+            mi.qg           = RhoQ6_comp;
             mi.cond_rate    = 3;
             mi.rel_hum      = 7;
             mi.rain_accum   = 8;
