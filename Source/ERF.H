@@ -2700,6 +2700,19 @@ private:
         amrex::ParallelDescriptor::Barrier("ERF::setRecordEnergyDataInfo");
     }
 
+     void setRecordAcousticDataInfo (const std::string& filename) // NOLINT
+    {
+        if (amrex::ParallelDescriptor::IOProcessor())
+        {
+            acoustic_datalog = std::make_unique<std::fstream>();
+            acoustic_datalog->open(filename.c_str(),std::ios::out|std::ios::app);
+            if (!acoustic_datalog->good()) {
+                amrex::FileOpenFailed(filename);
+            }
+        }
+        amrex::ParallelDescriptor::Barrier("ERF::setRecordAcousticDataInfo");
+    }
+    
     // Data sampler for line and plane output
     int line_sampling_interval = -1;
     int plane_sampling_interval = -1;
