@@ -15,7 +15,7 @@ amr.n_cell           =   128     4    128
 
 geometry.is_periodic = 1 1 0
 
-erf.initial_dz = 10.0
+erf.initial_dz = 1.0
 
 zlo.type = "SlipWall"
 zhi.type = "SlipWall"
